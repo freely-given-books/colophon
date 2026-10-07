@@ -330,6 +330,78 @@ def collapse(s):
     return re.sub(r"\s+", " ", s)
 
 
+def bracket_end(s, i):
+    """The index of the "]" closing the "[" at s[i] (escapes and nesting
+    respected), or None."""
+    depth = 0
+    k = i
+    while k < len(s):
+        ch = s[k]
+        if ch == "\\":
+            k += 2
+            continue
+        if ch == "[":
+            depth += 1
+        elif ch == "]":
+            depth -= 1
+            if depth == 0:
+                return k
+        k += 1
+    return None
+
+
+EMPH, NOTE = "#emph[", "#footnote["
+
+
+def trailing_notes(inner):
+    """Split the footnotes that end an italic run off it: (text, notes)."""
+    notes = ""
+    while inner.endswith("]"):
+        at = next((p for p in (m.start() for m in re.finditer(re.escape(NOTE), inner))
+                   if bracket_end(inner, p + len(NOTE) - 1) == len(inner) - 1), None)
+        if at is None or not inner[:at].strip():
+            break
+        notes = inner[at:] + notes
+        inner = inner[:at]
+    return inner, notes
+
+
+def tidy_emph(s):
+    """Italics as a person types them. The TEI marks italics word by word,
+    so the renderer gives "#emph[We] #emph[ought]" and "#emph[Cor]#emph[.]":
+    runs separated only by spaces are one run ("#emph[We ought]"), and a
+    footnote that ends a run is set after it ("#emph[forsaken]#footnote[..]"),
+    so its marker is not italic."""
+    out, i = [], 0
+    while i < len(s):
+        if s.startswith(EMPH, i):
+            j = bracket_end(s, i + len(EMPH) - 1)
+            if j is None:
+                out.append(s[i:])
+                break
+            inner = tidy_emph(s[i + len(EMPH):j])
+            k = j + 1
+            inner, notes = trailing_notes(inner)
+            while not notes:
+                ws = re.match(r"[ \t]*", s[k:]).group(0)
+                if not s.startswith(EMPH, k + len(ws)):
+                    break
+                j2 = bracket_end(s, k + len(ws) + len(EMPH) - 1)
+                if j2 is None:
+                    break
+                inner, notes = trailing_notes(inner + ws + tidy_emph(s[k + len(ws) + len(EMPH):j2]))
+                k = j2 + 1
+            out.append(EMPH + inner + "]" + notes)
+            i = k
+        elif s[i] == "\\":
+            out.append(s[i:i + 2])
+            i += 2
+        else:
+            out.append(s[i])
+            i += 1
+    return "".join(out)
+
+
 def noise(text, prev, nxt, leading=False):
     """XML indentation that is not a real space: whitespace-only text with a
     newline between two g/gap elements (or before a first g/gap child).
@@ -359,10 +431,15 @@ def div_blocks(r, div, level=2, lines=None):
         if n == "p" and layout.p_blocks(c, r.layer == "reg"):
             lines += split_p_lines(r, c)
         elif n == "p" or \
-                (n == "q" and c.get("rend") == "quote" and c.find(T + "p") is None):
+                (n == "q" and c.get("rend") in ("quote", "inset") and c.find(T + "p") is None):
             t = r.para(c)
             if t and r.layer == "reg" and c.get("rend") == "quote":
                 t = f"#quote[{t}]"
+            if t and r.layer == "reg" and c.get("rend") == "inset":
+                t = f"#block(inset: (x: 1em))[{t}]"      # set off, both sides
+            if t and r.layer == "reg" and c.get("rend") == "center" and not \
+                    (c.get("prev") and c.get("prev")[1:] not in r.__dict__.get("empty_blocks", ())):
+                t = f"#align(center)[{t}]"      # centered in the source (CCEL)
             if t and r.layer == "reg" and c.get("rend") == "epigraph":
                 lines += epigraph_block(*epigraph_parts(t))
                 continue
@@ -440,7 +517,10 @@ def epigraph_lines(r, ep):
         return []
     if ep.get("rend") == "quote":      # the edition sets it as a quotation
         return [f"#quote[{' '.join(x for x in (ref, body) if x)}]", ""]
-    return epigraph_block(ref, body)
+    after = False
+    if not ref:                        # a reference within the verse's text
+        ref, body, after = epigraph_parts(body)
+    return epigraph_block(ref, body, after)
 
 
 # a printed paragraph the edition sets as an epigraph (p[@rend="epigraph"]):
@@ -448,18 +528,40 @@ def epigraph_lines(r, ep):
 EPIGRAPH_REF = re.compile(r"^((?:[1-3] )?[A-Z][A-Za-z]*\.\s*\d+\.(?:\s*\d+(?:,\s*\d+)*\.)?)\s+(.*)$", re.S)
 
 
+# or a reference the edition gives after it ("... openly. — Matthew 6:6")
+EPIGRAPH_REF_AFTER = re.compile(r"^(.*?\S)\s+(—\s*(?:[1-3] )?[A-Z][a-z]+\.? \d+(?::\d+(?:[-–,]\s*\d+)*)?\.?)$", re.S)
+
+
 def epigraph_parts(t):
-    """(reference, verse) of a paragraph set as an epigraph."""
+    """(reference, verse, reference comes after the verse) of a paragraph
+    set as an epigraph."""
     m = EPIGRAPH_REF.match(t)
-    return (m.group(1), m.group(2)) if m else ("", t)
+    if m:
+        return m.group(1), m.group(2), False
+    m = EPIGRAPH_REF_AFTER.match(t)
+    if m:
+        return m.group(2), m.group(1), True
+    return "", t, False
 
 
-def epigraph_block(ref, body):
+def whole_emph(body):
+    """The verse without an #emph[...] that covers all of it: the epigraph
+    is set in italics already, and #emph inside would toggle back to roman."""
+    body = tidy_emph(body)
+    if body.startswith(EMPH) and bracket_end(body, len(EMPH) - 1) == len(body) - 1:
+        return body[len(EMPH):-1]
+    return body
+
+
+def epigraph_block(ref, body, after=False):
     lines = ["#align(center)[", "  #block(width: 85%)[", "    #set par(justify: false)"]
-    if ref:
-        lines += [f"    #text(size: 0.9em, weight: 600)[{ref}]", ""]
+    ref_line = [f"    #text(size: 0.9em, weight: 600)[{ref}]"] if ref else []
+    if ref and not after:
+        lines += ref_line + [""]
     if body:
-        lines.append(f'    #text(style: "italic")[{body}]')
+        lines.append(f'    #text(style: "italic")[{whole_emph(body)}]')
+    if ref and after:
+        lines += [""] + ref_line
     return lines + ["  ]", "]", "", "#v(0.8em)", ""]
 
 
@@ -619,8 +721,8 @@ def add_block(r, lines, c, t):
         sp = "" if c.get("rend") == "run-on" else " "
         while len(lines) >= 3 and lines[-2] == "":
             lines.pop()             # blank lines of blocks the review emptied
-        if lines[-2].startswith("#quote[") and lines[-2].endswith("]"):
-            lines[-2] = lines[-2][:-1] + sp + t + "]"    # runs on inside the quotation
+        if lines[-2].startswith(("#quote[", "#align(center)[")) and lines[-2].endswith("]"):
+            lines[-2] = lines[-2][:-1] + sp + t + "]"    # runs on inside the block
         else:
             lines[-2] += sp + t
     else:
@@ -764,7 +866,7 @@ def main():
         for f in files:
             path = out / f["file"]
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("\n".join(layout_file_lines(r, f, cfg, pre)) + "\n",
+            path.write_text(tidy_emph("\n".join(layout_file_lines(r, f, cfg, pre))) + "\n",
                             encoding="utf-8")
         print(f"wrote {len(files)} files to {out} ({a.layer} layer)")
         return
@@ -782,7 +884,7 @@ def main():
             lines += trailer_lines(r, tr)
         while lines and lines[-1] == "":
             lines.pop()
-        (out / name).write_text("\n".join(lines) + "\n", encoding="utf-8")
+        (out / name).write_text(tidy_emph("\n".join(lines)) + "\n", encoding="utf-8")
         n += 1
     print(f"wrote {n} files to {out} ({a.layer} layer)")
 

@@ -12,10 +12,22 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: books repository
+      - name: which books branch
+        # a colophon change that needs the books changed with it is tested
+        # against the books branch of the same name, if there is one
+        id: books
+        run: |
+          branch="${{ github.head_ref || github.ref_name }}"
+          if git ls-remote --exit-code --heads https://github.com/freely-given-books/books.git "$branch" >/dev/null; then
+            echo "ref=$branch" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=main" >> "$GITHUB_OUTPUT"
+          fi
+      - name: books repository (${{ steps.books.outputs.ref }})
         uses: actions/checkout@v4
         with:
           repository: freely-given-books/books
+          ref: ${{ steps.books.outputs.ref }}
           path: books
       - name: the Typst templates (their tags are the versions)
         run: |

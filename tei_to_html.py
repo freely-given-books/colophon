@@ -109,9 +109,19 @@ def curl(markup):
     return "".join(out)
 
 
+EM_JOIN = re.compile(r"</em>([ \t]*)<em>")
+EM_NOTE = re.compile(r'((?:<a class="noteref"[^>]*><sup>\d+</sup></a>)+)</em>')
+
+
+def tidy_em(b):
+    """Italics as one run where only spaces part them, and a note marker
+    ending an italic run set after it (tei_extract.tidy_emph's rule)."""
+    return EM_JOIN.sub(r"\1", EM_NOTE.sub(r"</em>\1", b))
+
+
 def finish(blocks):
     """Rendered blocks with their quotes curled, each a paragraph or more."""
-    return [curl(b) for b in blocks]
+    return [curl(tidy_em(b)) for b in blocks]
 
 
 BLOCK_TAG = re.compile(r"<(p|li|h[1-6]|blockquote|div|aside|section|td|th)[\s>/]")
@@ -285,6 +295,16 @@ class HtmlR(R):
         else:
             out.append(html_)
 
+    def epigraph_div(self, ref, body, after=False):
+        """An epigraph: its reference (before or after the verse) and the
+        verse, italic already (so an <em> around all of it is dropped)."""
+        body = tidy_em(body)
+        if re.fullmatch(r"<em>((?:(?!</?em>).)*)</em>", body, re.S):
+            body = body[4:-5]
+        ref_p = f'<p class="epigraph-ref">{ref}</p>' if ref else ""
+        text_p = f'<p class="epigraph-text">{body}</p>' if body else ""
+        return '<div class="epigraph">' + (text_p + ref_p if after else ref_p + text_p) + "</div>"
+
     def trailer(self, c):
         if self.layer == "orig":
             return self.para(c, "trailer")
@@ -444,21 +464,19 @@ class HtmlR(R):
                     elif t:
                         out.append(f'<p class="quote">\u201c{t}\u201d</p>')
                     continue
-                out.append('<div class="epigraph">' +
-                           (f'<p class="epigraph-ref">{ref}</p>' if ref else "") +
-                           (f'<p class="epigraph-text">{body}</p>' if body else "") + "</div>")
+                after = False
+                if not ref:                # a reference within the verse's text
+                    ref, body, after = epigraph_parts(body)
+                out.append(self.epigraph_div(ref, body, after))
                 continue
             if n == "p" and c.get("rend") == "epigraph" and self.layer == "reg":
-                ref, body = epigraph_parts(self.text(c))
-                out.append('<div class="epigraph">' +
-                           (f'<p class="epigraph-ref">{ref}</p>' if ref else "") +
-                           f'<p class="epigraph-text">{body}</p></div>')
+                out.append(self.epigraph_div(*epigraph_parts(self.text(c))))
                 continue
             if n == "p" and layout.p_blocks(c, self.layer == "reg"):
                 out += self.split_p(c)
                 continue
             if n == "p" or \
-                    (n == "q" and c.get("rend") == "quote" and c.find(T + "p") is None):
+                    (n == "q" and c.get("rend") in ("quote", "inset") and c.find(T + "p") is None):
                 t = self.text(c)
                 if t and self.layer == "reg" and c.get("rend") == "quote":
                     if self.quote_block:
@@ -466,6 +484,8 @@ class HtmlR(R):
                     else:
                         t = f"\u201c{t}\u201d"      # as Typst sets #quote[...]
                         self.add_block(out, c, f'<p class="quote">{t}</p>')
+                elif t and self.layer == "reg" and c.get("rend") in ("center", "inset"):
+                    self.add_block(out, c, f'<p class="{c.get("rend")}">{t}</p>')
                 elif t:
                     self.add_block(out, c, f"<p>{t}</p>")
                 else:

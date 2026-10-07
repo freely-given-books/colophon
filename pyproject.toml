@@ -1,6 +1,6 @@
 [project]
 name = "colophon"
-version = "0.2.0"
+version = "0.3.0"
 description = "Early printed texts (EEBO-TCP, CCEL) to an enriched TEI master, print PDFs and EPUBs"
 readme = "README.md"
 license = "CC0-1.0"

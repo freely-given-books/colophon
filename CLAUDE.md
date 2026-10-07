@@ -67,7 +67,11 @@ overrides), so the ebook and the Typst chapters cannot drift apart.
     `hi[@ana="#edition-only"]` the other way round
   - `@prev`/`@next` blocks the edition runs together (both kept as printed);
     `p[@rend="quote"]` a paragraph the edition sets as a quotation;
-    `trailer[@ana="#in-edition"]` a "FINIS." the edition keeps
+    `p`/`q[@rend="inset"]` one it sets off, indented both sides (the review's
+    `#block(inset: (x: 1em))[...]`); `p[@rend="center"]` centered in the
+    source (CCEL's class="Centered"), `#align(center)[...]` in the edition;
+    `trailer[@ana="#in-edition"]` a "FINIS." the edition keeps (one it
+    leaves out is not aligned, so words added at the end are not lost)
   - lists the review shapes (Sibbes): `list/@rend` a numbering of its own
     (`"a)"`, `"I."`; the review's `#[ #set enum(numbering: ..., start: N) ... ]`),
     `item/@n` on the first item the number it starts from, an item or a
@@ -236,9 +240,17 @@ by position and text, so a note can be rewritten, moved, added or dropped.
 It also carries italics (`_…_`, `#emph[…]`), the review's exact spacing,
 paragraph splits and merges, a printed "I." turned into a `+ ` item,
 `#quote[…]` blocks and `#chapter[long][short]` headings. Pure layout
-(`#linebreak()`, `#align(...)`) is not text and is not stored. `//` comment
-lines are ignored. The report lists every decision and anything it could
-not apply.
+(`#linebreak()`, `#pagebreak()`, `#par(...)`) is not text and is not
+stored, so it does not belong in `chapters/typ` at all: `./fgb check`
+requires `chapters/typ` to be exactly what the TEI gives back (`//`
+comment lines aside), so print and ebook cannot drift apart. Formatting
+the edition wants is a TEI encoding (centered, inset, epigraph, closer) or
+a template rule (headings kept with their text, fgbooks 0.5.4), never a
+per-book command. The extractor writes italics as a person types them
+(`#emph[We ought]`, a footnote after the run, not in it: `tidy_emph`), and
+an epigraph's reference may come before the verse ("EPHES. 6. 9.") or
+after it ("— Matthew 6:6"). `//` comment lines are ignored. The report
+lists every decision and anything it could not apply.
 
 **Bringing in a finished book** (Simon Magus): put the TCP file in
 `source/`, give `editorial.py` the book's heading template, build with the
