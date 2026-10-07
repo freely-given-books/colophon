@@ -18,8 +18,9 @@ What it checks
   5. The extracted chapters compile with Typst (if the `typst` Python
      package or CLI is installed).
 
-Exit code is 0 when 1, 3 (and 4/5 when run) pass; chapter differences in
-step 2 are reported but do not fail, since they may be intentional.
+Exit code is 0 when 1, 2, 3 (and 4/5 when run) pass. Step 2 is strict:
+chapters/typ must be what the TEI gives back (// comment lines aside), so
+the print edition and the ebook, both made from the TEI, cannot drift apart.
 """
 
 import argparse
@@ -106,15 +107,22 @@ def main():
     # 2. reg layer vs chapters/typ
     reg = tmp / "reg"
     run(sys.executable, HERE / "tei_extract.py", tei, reg, "--layer", "reg")
-    differ = []
+    differ, first = [], {}
     for f in chapter_files(chapters):
         mine = strip_comments((chapters / f).read_text()).replace("\n\n\n", "\n\n")
         got = (reg / f).read_text().replace("\n\n\n", "\n\n")
         if mine != got:
             differ.append(f)
+            first[f] = next(((k, a, b) for k, (a, b) in enumerate(
+                zip(mine.split("\n") + [""], got.split("\n") + [""]), 1) if a != b), None)
     print(f"[2] reg extraction identical to chapters/typ: "
           f"{len(chapter_files(chapters)) - len(differ)}/{len(chapter_files(chapters))}"
           + (f" (differs: {', '.join(differ)})" if differ else ""))
+    for f in differ[:5]:
+        if first[f]:
+            k, a, b = first[f]
+            print(f"    {f}:{k}\n      chapters/typ: {a[:100]!r}\n      from the TEI: {b[:100]!r}")
+    ok &= not differ
 
     # 3. orig layer vs TCP words
     o1, o2 = tmp / "orig", tmp / "tcp"

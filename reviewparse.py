@@ -248,6 +248,7 @@ def parse_review(text, inline_headings=False, titled=True, edition_heads=False):
     r.titled = titled
     r.list_info = {}
     r.epigraphs = []           # body indices of blocks set as an epigraph
+    r.insets = []              # ... of blocks set off, indented both sides
     # edition_heads (EDITION_HEADINGS): headings below the file title are
     # the edition's own, not printed text: (body index they stand before,
     # level, text), kept out of the body
@@ -315,6 +316,8 @@ def parse_review(text, inline_headings=False, titled=True, edition_heads=False):
                 r.list_info[len(r.body)] = {"kind": "¶", "depth": depth}
             if st.startswith("#align(center)[") and "#text(size: 0.9em, weight: 600)[" in st:
                 r.epigraphs.append(len(r.body))     # a scripture epigraph
+            if st.startswith("#block(inset:"):
+                r.insets.append(len(r.body))        # set off: p[@rend="inset"]
             r.body.append(("¶", "m", False))
             n = len(r.body)
             _scan_block(r, joined + "\n")

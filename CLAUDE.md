@@ -67,7 +67,11 @@ overrides), so the ebook and the Typst chapters cannot drift apart.
     `hi[@ana="#edition-only"]` the other way round
   - `@prev`/`@next` blocks the edition runs together (both kept as printed);
     `p[@rend="quote"]` a paragraph the edition sets as a quotation;
-    `trailer[@ana="#in-edition"]` a "FINIS." the edition keeps
+    `p`/`q[@rend="inset"]` one it sets off, indented both sides (the review's
+    `#block(inset: (x: 1em))[...]`); `p[@rend="center"]` centered in the
+    source (CCEL's class="Centered"), `#align(center)[...]` in the edition;
+    `trailer[@ana="#in-edition"]` a "FINIS." the edition keeps (one it
+    leaves out is not aligned, so words added at the end are not lost)
   - lists the review shapes (Sibbes): `list/@rend` a numbering of its own
     (`"a)"`, `"I."`; the review's `#[ #set enum(numbering: ..., start: N) ... ]`),
     `item/@n` on the first item the number it starts from, an item or a
@@ -150,8 +154,13 @@ the inside margin Lulu's for the page count (0.625in for 61-150 pages, 1in
 for 151-400, 1.125in for 401-600). It also warns when a footnote's text is set on
 another page than its marker (Typst's widow control can carry the marker's
 line over after placing the note; a crowded page can push the note on). Template 0.5.3 puts the running head at
-0.5in (top margin 0.9in, bottom 0.6in); a book sets its inside margin in
-`page-margin`, and a cover's `pages:` must follow a page-count change.
+0.5in (top margin 0.9in, bottom 0.6in); 0.5.4 keeps level 3/4 headings with
+their text; the trim is 5.5x8.5 unless a book sets `page-width`/`page-height`.
+A book sets its inside margin in `page-margin`. A cover
+(`scripts/panel_cover.typ` in the books repository) is compiled with its
+interior's page count and trim (`--input pages=N trim-width=W
+trim-height=H`; `interior_of` pairs `cover-vol-2.typ` with `...-vol-2.typ`),
+so its spine, Lulu's `pages / 444 + 0.06in`, cannot go stale.
 
 The underlying scripts, for anything else, run in colophon's environment
 (`colophon/.venv`, which uv keeps to `uv.lock`; any `./fgb` run or
@@ -236,9 +245,17 @@ by position and text, so a note can be rewritten, moved, added or dropped.
 It also carries italics (`_…_`, `#emph[…]`), the review's exact spacing,
 paragraph splits and merges, a printed "I." turned into a `+ ` item,
 `#quote[…]` blocks and `#chapter[long][short]` headings. Pure layout
-(`#linebreak()`, `#align(...)`) is not text and is not stored. `//` comment
-lines are ignored. The report lists every decision and anything it could
-not apply.
+(`#linebreak()`, `#pagebreak()`, `#par(...)`) is not text and is not
+stored, so it does not belong in `chapters/typ` at all: `./fgb check`
+requires `chapters/typ` to be exactly what the TEI gives back (`//`
+comment lines aside), so print and ebook cannot drift apart. Formatting
+the edition wants is a TEI encoding (centered, inset, epigraph, closer) or
+a template rule (headings kept with their text, fgbooks 0.5.4), never a
+per-book command. The extractor writes italics as a person types them
+(`#emph[We ought]`, a footnote after the run, not in it: `tidy_emph`), and
+an epigraph's reference may come before the verse ("EPHES. 6. 9.") or
+after it ("— Matthew 6:6"). `//` comment lines are ignored. The report
+lists every decision and anything it could not apply.
 
 **Bringing in a finished book** (Simon Magus): put the TCP file in
 `source/`, give `editorial.py` the book's heading template, build with the

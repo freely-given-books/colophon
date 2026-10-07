@@ -1841,9 +1841,18 @@ class View:
         self.parent = None
 
 
+def left_out_trailer(e):
+    """Whether a stream entry belongs to a trailer ("FINIS.") the edition
+    leaves out (keep_trailers did not mark it #in-edition)."""
+    return any(c.el is not None and local(c.el) == "trailer" and
+               c.el.get("ana") != "#in-edition" for c in (*e[3], e[2]) if c.kind == "container")
+
+
 def review_division(d, review, f, log, unresolved):
-    """Align one division with its review: body and notes separately."""
-    entries = stream(d.children)
+    """Align one division with its review: body and notes separately.
+    Trailers the edition leaves out are not aligned, so words the review
+    adds at the end of the text are not matched against them (and lost)."""
+    entries = [e for e in stream(d.children) if not left_out_trailer(e)]
     body, notes = split_notes(entries)
     tgt = [(t, k) for t, k, _ in review.body]
     owner = {}
@@ -1860,6 +1869,16 @@ def review_division(d, review, f, log, unresolved):
             p.el.set("rend", "epigraph")
             p.el.set("change", "#review")
             log.append((f, "epigraph", owner[jw].orig, "set as a scripture epigraph"))
+    for j0 in getattr(review, "insets", ()):
+        # a printed paragraph the review sets off, indented on both sides
+        jw = next((j for j in range(j0 + 1, len(tgt)) if j in owner), None)
+        if jw is None:
+            continue
+        p = next((a for a in ancestors(owner[jw]) if local(a.el) in ("p", "q")), None)
+        if p is not None and p.el.get("rend") != "inset":
+            p.el.set("rend", "inset")
+            p.el.set("change", "#review")
+            log.append((f, "inset", owner[jw].orig, "set off, indented both sides"))
     tflags = {}            # id(tok) -> [(target index, italic flag)]
     for j, tok in owner.items():
         tflags.setdefault(id(tok), []).append((j, review.body[j][2]))
@@ -2961,6 +2980,10 @@ def add_header(root, editor_name):
          "paragraph; they stay separate elements as printed."),
         (".//t:p[@rend='quote']", "p[@rend='quote']: a paragraph this edition sets as a "
          "quotation."),
+        (".//t:*[@rend='inset']", "@rend='inset': a paragraph or quotation this edition "
+         "sets off, indented on both sides."),
+        (".//t:p[@rend='center']", "p[@rend='center']: a paragraph centered in the "
+         "source, and in this edition."),
         (".//t:lg[@rend='paragraphs']", "lg[@rend='paragraphs']: verse this edition "
          "sets a line to a paragraph."),
         (".//t:item[@rend='paragraph']", "item[@rend='paragraph']: a printed list item "
