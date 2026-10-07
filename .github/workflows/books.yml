@@ -1,0 +1,34 @@
+# Every book must rebuild from this colophon exactly as it is committed in the
+# books repository: ./fgb check --all there, with this checkout as colophon/.
+name: books
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check-all:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: books repository
+        uses: actions/checkout@v4
+        with:
+          repository: freely-given-books/books
+          path: books
+      - name: the Typst templates (their tags are the versions)
+        run: |
+          git -C books submodule update --init typst/fgbooks-typst
+          git -C books/typst/fgbooks-typst fetch --tags --quiet
+      - name: this colophon as colophon/
+        uses: actions/checkout@v4
+        with:
+          path: books/colophon
+      - uses: astral-sh/setup-uv@v6
+      - name: ./fgb check --all
+        # colophon's fgb.py through uv, as the books repository's ./fgb runs it
+        working-directory: books
+        env:
+          FGB_LIBRARY: ${{ github.workspace }}/books
+        run: uv run --locked --project colophon python colophon/fgb.py check --all

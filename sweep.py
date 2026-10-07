@@ -72,7 +72,7 @@ def main():
         try:
             from spellchecker import SpellChecker
         except ImportError:
-            sys.exit("--early needs pyspellchecker (use the fgb-tei venv)")
+            sys.exit("--early needs pyspellchecker (run it with uv run --project colophon)")
         sp = SpellChecker()
         src = [p for p in (book / "source").glob("*.xml")
                if p.name.endswith((".tcp.xml", ".witness.xml"))]

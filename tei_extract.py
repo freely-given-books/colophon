@@ -247,11 +247,6 @@ class R:
             return self.inline(abbr)
         return self.inline(c)
 
-    def auto_reading(self, orig):
-        """In --only-auto mode, an editor reg falls back to the printed word
-        (the machine pass either left it or it was an editor emendation)."""
-        return self.inline(orig)
-
     # -- blocks ----------------------------------------------------------
     def para(self, el):
         enum = getattr(self, "settings", {}).get("TYPST_NUMBERED_PARAGRAPHS") == "enum"

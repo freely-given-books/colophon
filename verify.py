@@ -23,7 +23,10 @@ step 2 are reported but do not fail, since they may be intentional.
 """
 
 import argparse
-import difflib
+try:
+    import cydifflib as difflib     # difflib compiled: the same matches, faster
+except ImportError:
+    import difflib
 import shutil
 import subprocess
 import sys

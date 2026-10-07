@@ -142,11 +142,6 @@ def closer_lines(closer, layer="reg"):
             if c in names or c in dates]
 
 
-def parts_of(f):
-    """(element, is_div) for each part of a file."""
-    return [(p, local(p) == "div") for p in f["parts"]]
-
-
 def top_divs(root):
     """Direct <div> children of front, body and back, in order: the numbering
     quod.lib.umich.edu uses in its 1:N URLs (1-based)."""

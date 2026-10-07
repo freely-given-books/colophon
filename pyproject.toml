@@ -1,0 +1,19 @@
+[project]
+name = "colophon"
+version = "0.2.0"
+description = "Early printed texts (EEBO-TCP, CCEL) to an enriched TEI master, print PDFs and EPUBs"
+readme = "README.md"
+license = "CC0-1.0"
+requires-python = ">=3.11"
+# uv.lock pins the exact versions. The spell checker's dictionary and lxml's
+# serialization shape every book's TEI, so an upgrade (uv lock --upgrade) is
+# a change like any other: ./fgb check --all must still pass.
+dependencies = [
+    "lxml>=5",
+    "pyspellchecker>=0.8",
+    "cydifflib>=1.2",     # difflib compiled; the scripts fall back to difflib
+    "typst>=0.13",        # verify.py's compile check
+]
+
+[tool.uv]
+package = false

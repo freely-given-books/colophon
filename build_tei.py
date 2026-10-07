@@ -23,8 +23,12 @@ extractable word for word.
 """
 
 import argparse
+import bisect
 import copy
-import difflib
+try:
+    import cydifflib as difflib     # difflib compiled: the same matches, faster
+except ImportError:
+    import difflib
 import re
 import unicodedata
 from datetime import date
@@ -695,7 +699,7 @@ def table_readings(toks):
                         omit(ls[0])
                         omit(ls[1])
                     live = [x for x in ls if reading(x)]
-                    stripped = strip_comma(live)
+                    strip_comma(live)
                     live = [x for x in live if reading(x)]
                     first = next((x for x in live if x.kind == "word"), None)
                     if first is not None and reading(first)[:1].islower():
@@ -1712,16 +1716,21 @@ def split_notes(entries):
 
 def position_map(a, b):
     """Map positions (0..len) in sequence a to positions in b."""
-    sm = difflib.SequenceMatcher(None, a, b, autojunk=False)
-    ops = sm.get_opcodes()
+    ops = difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes()
+    spans = [o for o in ops if o[1] < o[2]]     # the ops covering a, in order
+    ends = [o[2] for o in spans]
 
     def f(i):
-        for op, i1, i2, j1, j2 in ops:
-            if i1 <= i < i2 or (i == i2 and op == ops[-1][0] and (i1, i2) == ops[-1][1:3]):
-                if op == "equal":
-                    return j1 + (i - i1)
-                return j1 + round((i - i1) * (j2 - j1) / max(1, i2 - i1))
-        return len(b)
+        k = bisect.bisect_right(ends, i)        # the span holding i
+        if k < len(spans):
+            op, i1, i2, j1, j2 = spans[k]
+        elif ops and i == ops[-1][2]:           # the end of a: the last op
+            op, i1, i2, j1, j2 = ops[-1]
+        else:
+            return len(b)
+        if op == "equal":
+            return j1 + (i - i1)
+        return j1 + round((i - i1) * (j2 - j1) / max(1, i2 - i1))
     return f
 
 
@@ -1731,14 +1740,20 @@ def match_notes(src, tgt, s2t):
     Returns list of (i or None, j or None)."""
     n, m = len(src), len(tgt)
     SKIP = 1.0
+    INF = float("inf")
     mapped = [s2t(a) for a, _ in src]
+    src_l = [t.lower() for _, t in src]
+    tgt_l = [t.lower() for _, t in tgt]
 
     def cost(i, j):
         d = min(abs(mapped[i] - tgt[j][0]), 400) / 100
-        sim = difflib.SequenceMatcher(None, src[i][1].lower(), tgt[j][1].lower()).ratio()
+        if d > 2 * SKIP:
+            # costs more than skipping both notes, whatever the text: such a
+            # match is always replaced, so its text is not compared
+            return INF
+        sim = difflib.SequenceMatcher(None, src_l[i], tgt_l[j]).ratio()
         return d + (1 - sim)
 
-    INF = float("inf")
     D = [[INF] * (m + 1) for _ in range(n + 1)]
     P = [[None] * (m + 1) for _ in range(n + 1)]
     D[0][0] = 0
@@ -1849,7 +1864,6 @@ def review_division(d, review, f, log, unresolved):
     for j, tok in owner.items():
         tflags.setdefault(id(tok), []).append((j, review.body[j][2]))
     s2t = position_map([e[0] for e in body], [t for t, _ in tgt])
-    t2s = position_map([t for t, _ in tgt], [e[0] for e in body])
 
     src = [(a, " ".join(e[0] for e in es)) for _, es, a in notes]
     tn = [(n["anchor"], " ".join(t for t, _ in n["toks"])) for n in review.notes]
@@ -1857,7 +1871,6 @@ def review_division(d, review, f, log, unresolved):
 
     note_spacing = []      # (note Tok, review note, owner) for the spacing pass
     placed = {}            # target index -> [elements to put after that word]
-    after_tok = []         # (tok, element): anchors after unchanged words
     before_first = []      # elements before the first word of the division
 
     def prev_word(j):
@@ -2850,6 +2863,23 @@ def collect_splits(struct, stream_index, log):
 # TEI header additions
 # ---------------------------------------------------------------------------
 
+REVIEW_DATE = re.compile(rb'(<change xml:id="review" when=")(\d{4}-\d{2}-\d{2})"')
+
+
+def write_tei(tree, out):
+    """Write the TEI. The review's date (revisionDesc) is today's only when
+    something else changed: a rebuild that decides nothing new leaves the
+    file as it was."""
+    new = etree.tostring(tree, xml_declaration=True, encoding="UTF-8")
+    out = Path(out)
+    if out.exists():
+        old = out.read_bytes()
+        m = REVIEW_DATE.search(old)
+        if m and REVIEW_DATE.sub(lambda n: n.group(1) + m.group(2) + b'"', new, count=1) == old:
+            return
+    out.write_bytes(new)
+
+
 def add_header(root, editor_name):
     hdr = root.find(T + "teiHeader")
     fd = hdr.find(T + "fileDesc")
@@ -3158,7 +3188,7 @@ def main():
                 sh.tail = h.tail
                 d.el.insert(idx + 1, sh)
     add_header(root, args.editor)
-    tree.write(args.out, xml_declaration=True, encoding="UTF-8")
+    write_tei(tree, args.out)
 
     if args.report:
         write_report(args.report, log, unresolved)
@@ -3211,7 +3241,7 @@ def build_layout(args, tree, root, text, toks, files, cfg=None):
         apply_edition_heads(log)
     rebuild(text, toks)
     add_header(root, args.editor)
-    tree.write(args.out, xml_declaration=True, encoding="UTF-8")
+    write_tei(tree, args.out)
     if args.report:
         write_report(args.report, log, unresolved)
     print(f"wrote {args.out}: {len(files)} files, {len(log)} review decisions, "

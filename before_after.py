@@ -21,7 +21,10 @@ book's TEI was added) and builds the new one.
 
 import argparse
 import collections
-import difflib
+try:
+    import cydifflib as difflib     # difflib compiled: the same matches, faster
+except ImportError:
+    import difflib
 import html
 import re
 import zipfile
@@ -29,7 +32,6 @@ from pathlib import PurePosixPath
 
 from lxml import etree
 
-XHTML = "http://www.w3.org/1999/xhtml"
 EPUB_NS = "http://www.idpf.org/2007/ops"
 BLOCKS = {"p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "dt", "dd", "td", "th",
           "figcaption", "pre", "blockquote", "div", "section", "aside", "header",
