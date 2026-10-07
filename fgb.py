@@ -364,12 +364,12 @@ def check_all(jobs):
     return 1 if failed else 0
 
 
-def render_front(bk, cover, outdir):
+def render_front(bk, cover, outdir, extra=()):
     """The front panel of a panel_cover.typ cover as an image at the trim
     size, 150 ppi: the ebook cover, and the picture for a web page."""
     img = outdir / (cover.stem + "-front.png")
     print(f"typst: {cover.relative_to(REPO)} (front panel)")
-    run("typst", "compile", "--root", REPO, "--input", "front-only=true",
+    run("typst", "compile", "--root", REPO, "--input", "front-only=true", *extra,
         "--format", "png", "--ppi", "150", cover, img, cwd=bk.dir)
     return img
 
@@ -424,23 +424,58 @@ def build_one_epub(bk, outdir, e):
     return extra + [out]
 
 
+def pdf_geometry(pdf):
+    """(pages, width in inches, height in inches) of a built PDF."""
+    info = run("pdfinfo", pdf, quiet=True)
+    pages = int(re.search(r"^Pages:\s+(\d+)", info, re.M).group(1))
+    w, h = map(float, re.search(r"^Page size:\s+([\d.]+) x ([\d.]+)", info, re.M).groups())
+    return pages, round(w / 72, 3), round(h / 72, 3)
+
+
+def interior_of(cover, files):
+    """The print file a cover wraps: the one print file, or the one sharing
+    the cover's suffix (cover-vol-2.typ wraps ...-vol-2.typ); None when no
+    print file matches (a notional cover, e.g. one only for the ebook)."""
+    suffix = Path(cover).stem.split("cover", 1)[-1]
+    if not suffix:
+        return files[0] if len(files) == 1 else None
+    hits = [f for f in files if Path(f).stem.endswith(suffix)]
+    return hits[0] if len(hits) == 1 else None
+
+
+def cover_inputs(geometry):
+    if geometry is None:
+        return []
+    pages, w, h = geometry
+    return ["--input", f"pages={pages}", "--input", f"trim-width={w}",
+            "--input", f"trim-height={h}"]
+
+
 def build_pdf(bk, outdir, covers=False):
     files = bk.cfg.get("PRINT") or [bk.dir.name + ".typ"]
     cover_files = (bk.cfg.get("COVERS") or
                    sorted(p.name for p in bk.dir.glob("cover*.typ"))) if covers else []
-    outs = []
+    outs, geometry = [], {}
     for f in files + cover_files:
         src = bk.dir / f
         out = outdir / Path(f).with_suffix(".pdf").name
         print(f"typst: {src.relative_to(REPO)}")
+        # a cover is given its interior's page count and trim (panel_cover.typ
+        # takes them from --input), so its spine cannot fall out of step
+        extra = cover_inputs(geometry.get(interior_of(f, files))) if f in cover_files else []
         # --root: covers import the shared design from scripts/
-        run("typst", "compile", "--root", REPO, src, out, cwd=bk.dir)
+        run("typst", "compile", "--root", REPO, *extra, src, out, cwd=bk.dir)
         outs.append(out)
         if f in files:
             lulu_check(out)
+            geometry[f] = pdf_geometry(out)
+        elif extra:
+            print(f"cover: {geometry[interior_of(f, files)][0]} pages, from "
+                  f"{Path(interior_of(f, files)).with_suffix('.pdf').name}")
     for f in cover_files:
         if "panel-cover(" in (bk.dir / f).read_text(encoding="utf-8"):
-            outs.append(render_front(bk, bk.dir / f, outdir))
+            outs.append(render_front(bk, bk.dir / f, outdir,
+                                     cover_inputs(geometry.get(interior_of(f, files)))))
     return outs
 
 
