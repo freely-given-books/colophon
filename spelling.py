@@ -500,7 +500,6 @@ MANUAL = {
     "queene": "queen",
     "rammes": "rams", "sinne": "sin", "sinnest": "sinnest",
     "sinneth": "sinneth",
-    "vncapable": "vncapable", "vncurable": "vncurable",
     "otherwhiles": "otherwhiles", "vnlooked": "unlooked",
     "vnexpedient": "unexpedient",
     "controlement": "controlment",

@@ -16,6 +16,8 @@ works from any folder.
                                   before the TEI next to the one built now,
                                   every change marked (--old REV|FILE.epub)
   ./fgb check  [BOOK]             full verification (verify.py)
+  ./fgb check --all [-j N]        every book, in parallel: run it after any
+                                  change to colophon
   ./fgb epub   [BOOK]             build the EPUB and run epubcheck   } into dist/
   ./fgb pdf    [BOOK]             compile the print edition(s)       } <author>/<book>/
   ./fgb packages                  unpack the Typst templates the books import
@@ -321,9 +323,45 @@ def cmd_changes(a):
 
 
 def cmd_check(a):
+    if a.all:
+        sys.exit(check_all(a.jobs))
     bk = Book(find_book(a.book))
     r = subprocess.run([PY, str(HERE / "verify.py"), str(bk.dir)])
     sys.exit(r.returncode)
+
+
+def check_all(jobs):
+    """verify.py on every TEI book, several at a time: the test that a change
+    to colophon leaves every book as committed. One line per book; the full
+    output of any that fail."""
+    import concurrent.futures as cf
+    import time
+    dirs = books()
+    jobs = jobs or os.cpu_count() or 2
+    print(f"checking {len(dirs)} books, {jobs} at a time ...")
+
+    def one(d):
+        t = time.time()
+        r = subprocess.run([PY, str(HERE / "verify.py"), str(d)],
+                           capture_output=True, text=True)
+        return d, r, time.time() - t
+
+    failed = []
+    with cf.ThreadPoolExecutor(jobs) as ex:
+        for d, r, secs in (f.result() for f in cf.as_completed([ex.submit(one, d) for d in dirs])):
+            name = str(d.relative_to(REPO / "books"))
+            ok = r.returncode == 0
+            chapters = next((l.split(": ", 1)[1] for l in r.stdout.splitlines()
+                             if l.startswith("[2]")), "")
+            print(f"  {'ok    ' if ok else 'FAILED'} {secs:5.0f}s  {name}"
+                  + (f"  (chapters/typ: {chapters})" if ok and "differs" in chapters else ""),
+                  flush=True)
+            if not ok:
+                failed.append((name, r.stdout + r.stderr))
+    for name, out in failed:
+        print(f"\n== {name}\n{out.rstrip()}")
+    print(f"\n{len(dirs) - len(failed)} of {len(dirs)} books pass")
+    return 1 if failed else 0
 
 
 def render_front(bk, cover, outdir):
@@ -545,6 +583,11 @@ def main():
         p = sub.add_parser(name)
         p.add_argument("book", nargs="?")
         p.set_defaults(fn=fn)
+        if name == "check":
+            p.add_argument("--all", action="store_true",
+                           help="every TEI book, in parallel (after a change to colophon)")
+            p.add_argument("-j", "--jobs", type=int, default=0,
+                           help="books at a time with --all (default: one per CPU)")
     p = sub.add_parser("build", help="PDFs and EPUB into dist/")
     p.add_argument("books", nargs="*", metavar="BOOK")
     p.add_argument("--pdf", action="store_true", help="only the PDFs")

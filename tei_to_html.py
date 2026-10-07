@@ -62,9 +62,6 @@ SCRIPT_RUNS = [
 NOTEREF_GAP = re.compile(r'\s+(<a class="noteref")')
 
 
-CLOSERS = set(".,;:!?)]")
-
-
 def curl(markup):
     """Curl straight quotes in rendered XHTML the way Typst does (its
     SmartQuoter): within a paragraph it remembers which quotes are open; a

@@ -22,7 +22,10 @@ matches: the strongest mismatches are the ones to read.
 """
 
 import argparse
-import difflib
+try:
+    import cydifflib as difflib     # difflib compiled: the same matches, faster
+except ImportError:
+    import difflib
 import json
 import re
 import sys

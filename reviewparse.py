@@ -33,39 +33,6 @@ def strip_markup(line):
     return s
 
 
-def parse_typ(text):
-    """Return (headings, tokens). tokens is a list of (tok, kind) where
-    kind is 'w' (word/punct) or 'm' (structure marker)."""
-    headings = []
-    toks = []
-    blocks = re.split(r"\n\s*\n", text)
-    for block in blocks:
-        lines = [l for l in block.split("\n")
-                 if not l.lstrip().startswith("//") and l.strip()]
-        lines = [l for l in lines if not l.lstrip().startswith("#set ")]
-        if not lines:
-            continue
-        cur_marker = None
-        for line in lines:
-            st = line.lstrip()
-            if st.startswith("="):
-                headings.append(st.lstrip("=").strip())
-                continue
-            m = re.match(r"^(\s*)([+-]) (.*)$", line)
-            if m:
-                toks.append(("+" if m.group(2) == "+" else "-", "m"))
-                body = m.group(3)
-                cur_marker = "item"
-            else:
-                if cur_marker is None:
-                    toks.append(("¶", "m"))
-                    cur_marker = "p"
-                body = line
-            for t in TOKEN_RE.findall(strip_markup(body)):
-                toks.append((t, "w"))
-    return headings, toks
-
-
 # ---------------------------------------------------------------------------
 # Markup-aware parser: keeps footnotes apart from the body, and records which
 # words are italic, so notes can be matched and moved and emphasis compared.
@@ -390,15 +357,3 @@ def parse_review(text, inline_headings=False, titled=True, edition_heads=False):
     r.body_sp = [r.body_sp_map.get(i, False) for i in range(len(r.body))]
     return r
 
-
-def flatten(review):
-    """The old flat stream: note words inline at their anchors."""
-    out, k = [], 0
-    notes = sorted(review.notes, key=lambda n: n["anchor"])
-    for i, e in enumerate(review.body + [None]):
-        while k < len(notes) and notes[k]["anchor"] == i:
-            out += [(t, "w") for t, _ in notes[k]["toks"]]
-            k += 1
-        if e is not None:
-            out.append((e[0], e[1]))
-    return out

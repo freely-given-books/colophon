@@ -40,8 +40,13 @@ the `colophon/` submodule and run through that repository's `./fgb`:
 colophon is checked out in, or the nearest folder above the current one
 holding `books/`.
 
-Requirements: Python 3 with `requirements.txt`; Typst; Java with jing and
-`tei_all.rng` for validation, and epubcheck, both optional.
+Requirements: [uv](https://docs.astral.sh/uv/), which keeps colophon's
+Python environment (`.venv`) to the exact versions in `uv.lock`; Typst; Java
+with jing and `tei_all.rng` for validation, and epubcheck, both optional.
+Outside `./fgb`: `uv run --project colophon python colophon/<script>.py`.
+
+After any change to colophon, `./fgb check --all` rebuilds every book in
+parallel and must find each one as committed.
 
 `CLAUDE.md` holds the working notes: the TEI encodings, the book settings,
 every script's options, and what was learned on each book.

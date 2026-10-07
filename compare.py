@@ -23,7 +23,10 @@ epub      body text of all pages in spine order (spacing-sensitive) and the
 Exit code 0 when nothing differs.
 """
 
-import difflib
+try:
+    import cydifflib as difflib     # difflib compiled: the same matches, faster
+except ImportError:
+    import difflib
 import html
 import re
 import subprocess

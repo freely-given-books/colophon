@@ -16,10 +16,6 @@ from lxml import etree
 PATTERNS = ("*.tcp.xml", "*.thml.xml")
 
 
-def is_source(path):
-    return any(Path(path).match(p) for p in PATTERNS)
-
-
 def find(src_dir):
     """The source file in a book's source/ folder, or None."""
     for pat in PATTERNS:

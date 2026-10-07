@@ -23,7 +23,10 @@ Markdown goes to stdout.
 """
 
 import argparse
-import difflib
+try:
+    import cydifflib as difflib     # difflib compiled: the same matches, faster
+except ImportError:
+    import difflib
 import re
 import subprocess
 import sys

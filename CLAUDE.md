@@ -153,41 +153,45 @@ line over after placing the note; a crowded page can push the note on). Template
 0.5in (top margin 0.9in, bottom 0.6in); a book sets its inside margin in
 `page-margin`, and a cover's `pages:` must follow a page-count change.
 
-The underlying scripts, for anything else:
+The underlying scripts, for anything else, run in colophon's environment
+(`colophon/.venv`, which uv keeps to `uv.lock`; any `./fgb` run or
+`uv sync --project colophon` makes it), written `$PY` here:
 
 ```sh
+PY=$PWD/colophon/.venv/bin/python     # from the books repository's root
+
 # enriched TEI from the TCP file, folding in reviewed Typst chapters
-python3 colophon/build_tei.py source/A09377.tcp.xml source/christian-economy.tei.xml \
+$PY colophon/build_tei.py source/A09377.tcp.xml source/christian-economy.tei.xml \
     --review chapters/typ --report source/review-report.md
 
 # Typst chapters (dedication.typ, chapter-NN.typ) from either layer
-python3 colophon/tei_extract.py source/christian-economy.tei.xml chapters/typ --layer reg
-python3 colophon/tei_extract.py source/christian-economy.tei.xml out/orig --layer orig
+$PY colophon/tei_extract.py source/christian-economy.tei.xml chapters/typ --layer reg
+$PY colophon/tei_extract.py source/christian-economy.tei.xml out/orig --layer orig
 #   --expand          orig layer: fro̅ -> from
 #   --show-gaps       orig layer: show illegible print as transcribed (•)
 #   --mark-supplied   wrap reconstructed letters in ⟨ ⟩
 #   --only-auto       reg layer: machine pass only (audit what the review changed)
 
 # EPUB 3 straight from the TEI (no Calibre); full command in the book's README
-python3 colophon/tei_epub.py source/christian-economy.tei.xml christian-economy.epub \
+$PY colophon/tei_epub.py source/christian-economy.tei.xml christian-economy.epub \
     --title "Christian Economy" --author "William Perkins" \
     --front ebook-front.html --cover cover-front.png --css ebook.css
 # or the whole book as one XHTML file, to preview in a browser
-python3 colophon/tei_to_html.py source/christian-economy.tei.xml preview.html
+$PY colophon/tei_to_html.py source/christian-economy.tei.xml preview.html
 # side-by-side reading copy: printed text | edition, every change marked
 # (hover a word for printed / machine / editor readings); read-only
-python3 colophon/tei_review.py source/christian-economy.tei.xml side-by-side.html
+$PY colophon/tei_review.py source/christian-economy.tei.xml side-by-side.html
 #   --before/--after FILE   modern pages (.typ or .html), as for tei_epub.py
 
 # a copy against the early text and a modern witness: likely slips
-python3 colophon/slips.py source/<book>.tei.xml witness.pdf   # or .epub, .txt, a .typ folder
+$PY colophon/slips.py source/<book>.tei.xml witness.pdf   # or .epub, .txt, a .typ folder
 # odd spacing, punctuation, quotes, swallowed semicolons in chapters/typ
-python3 colophon/sweep.py books/<author>/<book> [--early]
+$PY colophon/sweep.py books/<author>/<book> [--early]
 # scripture references: verses that don't exist, quotes that don't match (KJV/BSB)
-python3 colophon/refs.py books/<author>/<book> --quotes [--bible bsb]
+$PY colophon/refs.py books/<author>/<book> --quotes [--bible bsb]
 
 # end-to-end check: rebuild matches committed TEI, round trips, compile
-python3 colophon/verify.py books/william-perkins/christian-economy
+$PY colophon/verify.py books/william-perkins/christian-economy
 ```
 
 There used to be a Typst-native reader, `tei.typ`
