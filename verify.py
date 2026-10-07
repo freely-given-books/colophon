@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
-End-to-end check of a TEI edition. Run from the repository root:
+End-to-end check of a TEI edition. Run from the books repository's root
+(or ./fgb check BOOK):
 
-  python3 scripts/tei/verify.py books/william-perkins/christian-economy \
+  python3 colophon/verify.py books/william-perkins/christian-economy \
       --tcp A09377.tcp.xml --tei christian-economy.tei.xml
 
 What it checks

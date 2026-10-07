@@ -2,7 +2,7 @@
 Check an EPUB with Calibre's own checker (the editor's "Check book"), for
 when epubcheck (Java) isn't available. Run it through Calibre's Python:
 
-  calibre-debug scripts/tei/check_epub.py BOOK.epub
+  calibre-debug colophon/check_epub.py BOOK.epub
 
 Prints one line per problem and exits non-zero if there are any.
 """

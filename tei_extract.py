@@ -21,7 +21,7 @@ Options:
                       reconstructed letters
 
 Writes dedication.typ and chapter-NN.typ in OUTDIR (the layout used by
-books/william-perkins/christian-economy in freely-given-books). Works on
+books/william-perkins/christian-economy in the books repository). Works on
 the untouched TCP file too (it simply has no <choice> elements).
 """
 

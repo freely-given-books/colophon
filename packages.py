@@ -23,7 +23,9 @@ import tarfile
 import io
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parent.parent.parent
+import library
+
+REPO = library.ROOT
 SUBMODULE = REPO / "typst" / "fgbooks-typst"
 CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "fgb-typst" / "packages"
 IMPORT_RE = r"@local/[A-Za-z0-9_-]+:[0-9]+\.[0-9]+\.[0-9]+"

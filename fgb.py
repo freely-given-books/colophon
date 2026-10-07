@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-fgb: one command for the TEI book pipeline. Run it through ./fgb at the
-repository root (which sets up the Python environment the first time); it
+fgb: one command for the TEI book pipeline (colophon). Run it through ./fgb
+at the root of the books repository, which sets up the Python environment
+the first time and tells colophon where the books are (library.py); it
 works from any folder.
 
   ./fgb list                      books with a TEI edition
@@ -53,11 +54,12 @@ import sys
 import tempfile
 from pathlib import Path
 
+import library
 import packages
 import sources
 
 HERE = Path(__file__).resolve().parent
-REPO = HERE.parent.parent
+REPO = library.ROOT
 PY = sys.executable
 
 
@@ -471,8 +473,8 @@ def incompatible(path):
     return why
 
 
-def git_state():
-    r = subprocess.run(["git", "-C", str(REPO), "describe", "--always", "--dirty"],
+def git_state(repo=REPO):
+    r = subprocess.run(["git", "-C", str(repo), "describe", "--always", "--dirty"],
                        capture_output=True, text=True)
     return r.stdout.strip() or "unknown"
 
@@ -518,7 +520,7 @@ def cmd_build(a):
             failed.append(bk.name)
             continue
         (outdir / "build-info.txt").write_text(
-            f"{bk.name}\nbuilt from commit {state}\n" +
+            f"{bk.name}\nbuilt from commit {state} with colophon {git_state(HERE)}\n" +
             "".join(f"{f.name}\n" for f in files), encoding="utf-8")
         built.append((bk.name, files))
     print()
@@ -567,7 +569,7 @@ def main():
     if a.cmd == "find":
         a.book, a.word = (a.args[0], a.args[1]) if len(a.args) > 1 else (None, a.args[0])
     if a.cmd not in ("list", "find"):
-        # the Typst templates, from the submodule's tags (scripts/tei/packages.py)
+        # the Typst templates, from the submodule's tags (packages.py)
         try:
             a.packages = packages.setup()
         except packages.PackageError as e:

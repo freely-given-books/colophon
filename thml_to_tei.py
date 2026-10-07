@@ -254,7 +254,7 @@ def header(thml, path):
     if src_info:
         tei("note", bibl, src_info)
     tei("note", bibl, f"Converted from the CCEL ThML file {Path(path).name} by "
-        "scripts/tei/thml_to_tei.py. The text is kept exactly; CCEL gives no page "
+        "colophon's thml_to_tei.py. The text is kept exactly; CCEL gives no page "
         "or line information, so this transcription is paragraph-faithful, not "
         "line-faithful.")
     ed = tei("encodingDesc", hdr)
