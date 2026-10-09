@@ -371,23 +371,25 @@ class HtmlR(R):
         paragraph for RUN_IN_DIVS) and its content."""
         out = []
         for h in div.findall(T + "head"):
-            t = self.text(h)
-            if not t:
-                continue
-            if self.layer == "reg" and h.get("prev"):
-                out.append(RUN_ON + t)      # the review runs it on (join_run_on)
-                continue
-            if self.layer == "reg" and h.get("next"):
-                out.append(f"<p>{t}</p>")    # its paragraph runs on
-                continue
-            if div.get("type") in self.run_in:
-                out.append(f'<p class="runin"><strong>{t}</strong></p>')
-            else:
-                out.append(f"<h{min(level + 1, 6)}>{t}</h{min(level + 1, 6)}>")
+            out += self.head_html(h, div, level)
         if self.layer == "reg" and any(h.get("next") for h in div.findall(T + "head")):
             self.blocks(div, level, out)      # its paragraph runs on from the head
             return finish(out)
         return out + self.blocks(div, level)
+
+    def head_html(self, h, div, level):
+        """A division's printed head: h{level+1}, or a bold run-in paragraph
+        for RUN_IN_DIVS."""
+        t = self.text(h)
+        if not t:
+            return []
+        if self.layer == "reg" and h.get("prev"):
+            return [RUN_ON + t]             # the review runs it on (join_run_on)
+        if self.layer == "reg" and h.get("next"):
+            return [f"<p>{t}</p>"]          # its paragraph runs on
+        if div.get("type") in self.run_in:
+            return [f'<p class="runin"><strong>{t}</strong></p>']
+        return [f"<h{min(level + 1, 6)}>{t}</h{min(level + 1, 6)}>"]
 
     def layout_file(self, f, ident):
         """Layout mode: one file of the layout as a section, like division()."""
@@ -403,6 +405,9 @@ class HtmlR(R):
         for el in f["parts"]:
             if local(el) == "div":
                 out += self.div_html(el, self.levels.get(el.get("type"), 2))
+            elif local(el) == "head":       # a file starting inside a division
+                div = el.getparent()
+                out += self.head_html(el, div, self.levels.get(div.get("type"), 2))
             else:
                 self.blocks([el], 2, out)      # may run on from the block before
         out = finish(join_run_on(out))
@@ -448,6 +453,17 @@ class HtmlR(R):
                 elif name:
                     inner.insert(0, f"<p>{name}</p>")
                 out += inner
+                continue
+            if n == "note":
+                # a margin note standing loose between blocks (beside a
+                # head): its marker ends the block before
+                t = self.node(c)
+                if t and out and out[-1].endswith("</p>"):
+                    out[-1] = out[-1][:-4] + t + "</p>"
+                elif t and out and re.match(r"<h[1-6]>", out[-1]):
+                    out[-1] = out[-1][:-5] + t + out[-1][-5:]
+                elif t:
+                    out.append(f"<p>{t}</p>")
                 continue
             if n == "label" and c.get("type") == "head":
                 if self.layer == "reg":       # a heading the edition adds

@@ -428,6 +428,15 @@ def div_blocks(r, div, level=2, lines=None):
         if n == "sp":
             lines += sp_lines(r, c, level)
             continue
+        if n == "note":
+            # a margin note standing loose between blocks (beside a head):
+            # its marker ends the block before
+            t = r.node(c)
+            if t and len(lines) >= 2 and lines[-1] == "" and lines[-2]:
+                lines[-2] += t
+            elif t:
+                lines += [t, ""]
+            continue
         if n == "p" and layout.p_blocks(c, r.layer == "reg"):
             lines += split_p_lines(r, c)
         elif n == "p" or \
@@ -655,23 +664,26 @@ def div_lines(r, div, level):
     a bold run-in paragraph for RUN_IN_DIVS) and all it contains."""
     lines = []
     for h in div.findall(T + "head"):
-        t = collapse(r.inline(h)).strip()
-        if not t:
-            continue
-        if r.layer == "reg" and h.get("prev"):
-            lines += [RUN_ON + t, ""]       # the review runs it on (join_run_on)
-            continue
-        if r.layer == "reg" and h.get("next"):
-            lines += [t, ""]                # its paragraph runs on (add_block)
-            continue
-        if div.get("type") in r.run_in:
-            enum = getattr(r, "settings", {}).get("TYPST_NUMBERED_PARAGRAPHS") == "enum"
-            lines += [f"#strong[{block_start_escape(t, numerals=not enum)}]", ""]
-        else:
-            lines += [f"{'=' * level} {t}", ""]
+        lines += head_lines(r, h, div, level)
     if r.layer == "reg" and any(h.get("next") for h in div.findall(T + "head")):
         return div_blocks(r, div, level, lines)     # its paragraph runs on (add_block)
     return lines + div_blocks(r, div, level)
+
+
+def head_lines(r, h, div, level):
+    """A division's printed head: a heading line at `level`, or a bold
+    run-in paragraph for RUN_IN_DIVS."""
+    t = collapse(r.inline(h)).strip()
+    if not t:
+        return []
+    if r.layer == "reg" and h.get("prev"):
+        return [RUN_ON + t, ""]             # the review runs it on (join_run_on)
+    if r.layer == "reg" and h.get("next"):
+        return [t, ""]                      # its paragraph runs on (add_block)
+    if div.get("type") in r.run_in:
+        enum = getattr(r, "settings", {}).get("TYPST_NUMBERED_PARAGRAPHS") == "enum"
+        return [f"#strong[{block_start_escape(t, numerals=not enum)}]", ""]
+    return [f"{'=' * level} {t}", ""]
 
 
 def sp_lines(r, sp, level):
@@ -691,9 +703,14 @@ def sp_lines(r, sp, level):
 
 def part_lines(r, el, level, lines):
     """Layout mode: one part of a file, a division or a loose block, added to
-    the file's `lines` (a loose block may run on from the one before it)."""
+    the file's `lines` (a loose block may run on from the one before it). A
+    division's head given as a part of its own (a file that starts inside
+    the division) is set as the division would set it."""
     if local(el) == "div":
         lines += div_lines(r, el, r.levels.get(el.get("type"), level))
+    elif local(el) == "head":
+        div = el.getparent()
+        lines += head_lines(r, el, div, r.levels.get(div.get("type"), level))
     else:
         div_blocks(r, _Loose(el), level, lines)
 
