@@ -113,15 +113,15 @@ def main():
         got = (reg / f).read_text().replace("\n\n\n", "\n\n")
         if mine != got:
             differ.append(f)
-            first[f] = next(((k, a, b) for k, (a, b) in enumerate(
-                zip(mine.split("\n") + [""], got.split("\n") + [""]), 1) if a != b), None)
+            first[f] = next(((k, x, y) for k, (x, y) in enumerate(
+                zip(mine.split("\n") + [""], got.split("\n") + [""]), 1) if x != y), None)
     print(f"[2] reg extraction identical to chapters/typ: "
           f"{len(chapter_files(chapters)) - len(differ)}/{len(chapter_files(chapters))}"
           + (f" (differs: {', '.join(differ)})" if differ else ""))
     for f in differ[:5]:
         if first[f]:
-            k, a, b = first[f]
-            print(f"    {f}:{k}\n      chapters/typ: {a[:100]!r}\n      from the TEI: {b[:100]!r}")
+            k, x, y = first[f]      # not a, b: `a` is the parsed arguments
+            print(f"    {f}:{k}\n      chapters/typ: {x[:100]!r}\n      from the TEI: {y[:100]!r}")
     ok &= not differ
 
     # 3. orig layer vs TCP words
