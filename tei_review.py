@@ -2,8 +2,10 @@
 """
 A side-by-side reading copy of an enriched TEI edition: the text as printed
 on the left, the edition on the right, block by block, every editorial
-change marked. Open the HTML file in a browser; hover over a marked word to
-see what was printed, what the machine proposed and who decided.
+change marked. Open the HTML file in a browser; hover over a marked word (tap
+it on a phone) to see what was printed, what the machine proposed and who
+decided. On a narrow screen the two texts stack, printed first, and the
+options fold away.
 
   python3 tei_review.py EDITION.tei.xml OUT.html [--before FILE] [--after FILE]
                         [--only vol-1/]
@@ -289,7 +291,22 @@ body.only-orig .row, body.only-reg .row { grid-template-columns:1fr; max-width:7
   .row { grid-template-columns:1fr; gap:6px; }
   .row > .orig { border-left:3px solid var(--rule); padding-left:8px; font-size:15px; }
   .colhead { display:none; }
+  header.top { padding:6px 12px; }
+  header.top h1 { font-size:14px; margin:0; white-space:nowrap; overflow:hidden;
+    text-overflow:ellipsis; }
+  main { padding:0 12px 80px; }
+  section.div { margin-top:24px; }
 }
+details.opts > summary { cursor:pointer; color:var(--muted); width:max-content; }
+details.opts[open] > summary { margin-bottom:4px; }
+.legend { display:none; margin:6px 0 0; color:var(--muted); }
+@media (max-width:760px) { .legend { display:block; } }
+@media (hover:none) { .ch { cursor:pointer; } }
+#tip { position:fixed; left:8px; right:8px; bottom:8px; z-index:10; max-width:640px;
+  margin:0 auto; background:var(--panel); color:var(--fg); border:1px solid var(--rule);
+  border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,.25); padding:10px 14px;
+  font:14px/1.45 system-ui,sans-serif; white-space:pre-line; }
+#tip[hidden] { display:none; }
 """
 
 JS = """
@@ -310,6 +327,19 @@ const cols = document.getElementById('cols');
 cols.addEventListener('change', () => {
   b.classList.toggle('only-orig', cols.value === 'orig');
   b.classList.toggle('only-reg', cols.value === 'reg'); });
+// phones: options folded away, and a tap on a marked word shows its readings
+const narrow = matchMedia('(max-width:760px)');
+if (narrow.matches) document.querySelector('details.opts').open = false;
+document.querySelector('details.opts').addEventListener('toggle', hdr);
+const tip = document.getElementById('tip');
+if (matchMedia('(hover:none)').matches) {
+  document.addEventListener('click', e => {
+    const c = e.target.closest('.ch[title]');
+    if (c) { tip.textContent = c.title; tip.hidden = false; }
+    else if (!e.target.closest('#tip')) tip.hidden = true;
+  });
+}
+tip.addEventListener('click', () => { tip.hidden = true; });
 """
 
 
@@ -327,14 +357,18 @@ def page(title, year, sections, toc):
 <style>{CSS}{hide}</style></head>
 <body>
 <header class="top"><h1>{html.escape(title)}: printed {year} and edition</h1>
+<details class="opts" open><summary>Options</summary>
 <div class="controls"><span>Mark editor changes:</span>{boxes}
 <label><input type="checkbox" id="auto"> underline machine changes</label>
 <label><input type="checkbox" id="pages" checked> printed pages</label>
 <label>show <select id="cols"><option value="both">both columns</option>
 <option value="orig">printed only</option><option value="reg">edition only</option></select></label>
-</div></header>
+</div>
+<p class="legend">Each printed passage (with a bar at its left) is followed by the edition's.
+Tap a marked word to see what was printed and who changed it.</p></details></header>
 <nav class="toc">{toc}</nav>
 <main>{sections}</main>
+<div id="tip" hidden></div>
 <script>{JS}</script>
 </body></html>
 """
