@@ -9,9 +9,11 @@ converts it with this module in memory, so there is no intermediate file.
 
   ThML                         TEI
   div1                         div[@type="chapter"][@n], numbered in order
+  div1 type="Work"             unwrapped: its div2s are the chapters (Owen)
   div2, div3 ... inside it     div[@type="section"][@n], numbered per parent
   div1 "Title Page"            front/titlePage (docTitle, byline/docAuthor,
-                               epigraph)
+  (or type="Titlepage")        epigraph; a page of p.h1-h4 lines: title
+                               lines, then the "By ..." lines as byline)
   div1 "Contents", "Indexes"   div[@type="contents"], div[@type="index"]
                                (CCEL's own apparatus; SKIP_DIVISIONS)
   h1-h4 (first in a div)       head
@@ -23,7 +25,10 @@ converts it with this module in memory, so there is no intermediate file.
   "Name:" (span.sc)            "Christian:"; as a TCP text encodes them)
   blockquote                   quote (its p's kept)
   verse / l                    quote / lg / l
-  note                         note[@place="foot"]
+  argument                     argument/p[@rend="inset"] (a chapter's summary)
+  note                         note[@place="foot"] (a note's one p unwrapped)
+  pb                           pb[@n] (the printed edition CCEL followed)
+  ul / ol, li                  list, item (CCEL's indexes)
   span.sc (small capitals)     seg[@rend="smallcaps"]
   br                           lb
   i / em, b / strong           hi[@rend="italic"] / hi[@rend="bold"]
@@ -32,8 +37,9 @@ converts it with this module in memory, so there is no intermediate file.
 
 The text itself is kept exactly, straight quotes and "--" included: the
 machine pass records any typographic change (TYPOGRAPHY in editorial.py).
-CCEL texts carry no page or line information, so the TEI is
-paragraph-faithful, not line-faithful; the header says so.
+CCEL texts carry no line information, so the TEI is paragraph-faithful,
+not line-faithful; the header says so. Some (Owen) keep the page breaks of
+the printed edition they follow, as pb.
 
   python3 thml_to_tei.py grace.thml.xml [out.xml]   # write the TEI, to look at
 """
@@ -83,6 +89,8 @@ def inline(src, dst):
         n = c.tag
         if n == "br":
             el = tei("lb", dst)
+        elif n == "pb":
+            el = tei("pb", dst, n=c.get("n"), xml_id=xid(c))
         elif n in INLINE:
             tag, rend = INLINE[n]
             el = tei(tag, dst, rend=rend)
@@ -94,8 +102,12 @@ def inline(src, dst):
             inline(c, el)
         elif n == "note":
             el = tei("note", dst, place="foot", n=c.get("n"), xml_id=xid(c))
-            inline(c, el)
-        elif n in ("span", "a", "font", "sup", "sub", "name", "added", "foreign"):
+            kids = [x for x in c if isinstance(x.tag, str)]
+            if len(kids) == 1 and kids[0].tag == "p" and not (c.text or "").strip():
+                inline(kids[0], el)     # a note of one paragraph: its text
+            else:
+                inline(c, el)
+        elif n in ("span", "a", "font", "sup", "sub", "name", "added", "foreign", "cite"):
             el = tei("hi" if n in ("sup", "sub") else "seg", dst,
                      rend=n if n in ("sup", "sub") else
                      "smallcaps" if c.get("class") == "sc" else None)
@@ -154,6 +166,24 @@ def block(src, dst):
     elif re.fullmatch(r"h[1-6]", n):
         h = tei("head", dst, xml_id=xid(src))
         inline(src, h)
+    elif n == "pb":
+        tei("pb", dst, n=src.get("n"), xml_id=xid(src))
+    elif n in ("ul", "ol"):
+        # (CCEL's indexes; SKIP_DIVISIONS leaves them out)
+        lst = tei("list", dst, xml_id=xid(src))
+        lst.text = src.text
+        for c in src:
+            if not isinstance(c.tag, str):
+                continue
+            if c.tag != "li":
+                raise ValueError(f"ThML <{n}> holds <{c.tag}> (id {c.get('id')})")
+            inline(c, tei("item", lst, xml_id=xid(c)))
+            lst[-1].tail = c.tail
+    elif n == "argument":
+        # a chapter's summary (Owen's, under the chapter head), set off as
+        # printed: indented both sides (the review's #block(inset: ...))
+        p = tei("p", tei("argument", dst, xml_id=xid(src)), rend="inset")
+        inline(src, p)
     elif re.fullmatch(r"div\d?", n):
         division(src, dst, "section", str(1 + sum(
             1 for c in dst if isinstance(c.tag, str) and c.tag == T + "div")))
@@ -171,7 +201,8 @@ def division(d, parent, typ, n):
     blocks(d, div)
     # a heading after the text began is not the division's title: at the
     # end it is a signature (the Apology's "JOHN BUNYAN."), else centred
-    kids = [c for c in div if isinstance(c.tag, str)]
+    # (a page break before the title is not text)
+    kids = [c for c in div if isinstance(c.tag, str) and c.tag != T + "pb"]
     for k, c in enumerate(kids):
         if c.tag == T + "head" and any(x.tag != T + "head" for x in kids[:k]):
             if all(x.tag == T + "head" for x in kids[k:]):
@@ -205,7 +236,27 @@ def title_page(d, front):
     title, a "By" line and the heading after it the byline, a paragraph
     holding a scripture reference the epigraph, other lines subtitles."""
     tp = tei("titlePage", front, xml_id=xid(d))
-    blocks = [c for c in d if isinstance(c.tag, str)]
+    blocks = [c for c in d if isinstance(c.tag, str) and c.tag != "pb"]
+    if blocks and all(c.tag == "p" and re.fullmatch(r"h[1-6]", c.get("class") or "")
+                      for c in blocks):
+        # a title page set line by line in p.h1-h4 (Owen): the lines before
+        # the "By ..." line are the title, that line and the rest the byline
+        doc, byline = tei("docTitle", tp), None
+        for c in blocks:
+            text = " ".join("".join(c.itertext()).split())
+            if byline is None and text.lower().startswith("by "):
+                byline = tei("byline", tp)
+            if byline is None:
+                el = tei("titlePart", doc, type="sub" if len(doc) else "main",
+                         xml_id=xid(c))
+                inline(c, el)
+            else:
+                line = tei("seg", byline, xml_id=xid(c))
+                inline(c, line)
+                line.tail = " "
+        if byline is not None and len(byline):
+            byline[-1].tail = None
+        return
     byline = None
     for c in blocks:
         text = " ".join("".join(c.itertext()).split())
@@ -268,6 +319,25 @@ def header(thml, path):
     return hdr
 
 
+def top_divisions(body):
+    """The body's divisions, a div1 of type "Work" (the whole book, its
+    parts in div2s) unwrapped."""
+    for d in body:
+        if not isinstance(d.tag, str):
+            continue
+        if not re.fullmatch(r"div\d", d.tag):
+            raise ValueError(f"ThML.body holds <{d.tag}>; expected div1 ...")
+        if (d.get("type") or "").lower() == "work":
+            for c in d:
+                if not isinstance(c.tag, str) or c.tag == "pb":
+                    continue
+                if not re.fullmatch(r"div\d", c.tag):
+                    raise ValueError(f"ThML Work div holds <{c.tag}> (id {c.get('id')})")
+                yield c
+        else:
+            yield d
+
+
 def convert(path):
     """The TEI (an lxml ElementTree) for a ThML file."""
     parser = etree.XMLParser(load_dtd=False, resolve_entities=False, no_network=True)
@@ -278,13 +348,9 @@ def convert(path):
     front = None
     body = tei("body", text)
     n = 0
-    for d in thml.find("ThML.body"):
-        if not isinstance(d.tag, str):
-            continue
-        if not re.fullmatch(r"div\d", d.tag):
-            raise ValueError(f"ThML.body holds <{d.tag}>; expected div1 ...")
-        title = d.get("title") or ""
-        if title.lower() == "title page":
+    for d in top_divisions(thml.find("ThML.body")):
+        title = (d.get("title") or "").strip().rstrip(".")
+        if title.lower() == "title page" or (d.get("type") or "").lower() == "titlepage":
             if front is None:
                 front = etree.Element(T + "front")
                 text.insert(0, front)

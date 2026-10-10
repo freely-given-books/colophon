@@ -598,7 +598,7 @@ class HtmlR(R):
                 out += self.trailer(c)
             elif n == "div" and self.levels is not None:
                 out += self.div_html(c, self.levels.get(c.get("type"), level + 1))
-            elif n == "div" or (n == "q" and c.find(T + "p") is not None):
+            elif n in ("div", "argument") or (n == "q" and c.find(T + "p") is not None):
                 out += self.blocks(c)
             else:
                 for h in self.para(c) or [""]:

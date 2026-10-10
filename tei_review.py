@@ -187,7 +187,7 @@ def rows(div, o, m):
             if c.get("n"):
                 page = f'<span class="pb">p.&#160;{html.escape(c.get("n"))}</span> '
             continue
-        if n == "div" or (n == "q" and c.find(T + "p") is not None):
+        if n in ("div", "argument") or (n == "q" and c.find(T + "p") is not None):
             if n == "div":
                 oh, mh = finish(o.heading(c)), finish(m.heading(c))
                 if oh or mh:
