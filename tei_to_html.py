@@ -178,6 +178,20 @@ class HtmlR(R):
         into is finished (finish()), since a run-on block joins another."""
         return NOTEREF_GAP.sub(r"\1", collapse(self.inline(el)).strip())
 
+    def signature(self, out, c, t, first):
+        """A signature line: in the edition set right, the first of a closer
+        a line below the paragraph before (house style; ebook.css
+        p.signature, p.signature-first); in the orig layer a plain block.
+        One the review runs on into the text (@prev) stays in it."""
+        if not t:
+            return
+        if self.layer != "reg" or (c is not None and c.get("prev")):
+            self.add_block(out, c if c is not None else etree.Element("x"), f"<p>{t}</p>")
+            return
+        cls = "signature signature-first" if first[0] else "signature"
+        first[0] = False
+        out.append(f'<p class="{cls}">{t}</p>')
+
     def para(self, el, cls=None):
         t = self.text(el)
         if not t:
@@ -371,23 +385,25 @@ class HtmlR(R):
         paragraph for RUN_IN_DIVS) and its content."""
         out = []
         for h in div.findall(T + "head"):
-            t = self.text(h)
-            if not t:
-                continue
-            if self.layer == "reg" and h.get("prev"):
-                out.append(RUN_ON + t)      # the review runs it on (join_run_on)
-                continue
-            if self.layer == "reg" and h.get("next"):
-                out.append(f"<p>{t}</p>")    # its paragraph runs on
-                continue
-            if div.get("type") in self.run_in:
-                out.append(f'<p class="runin"><strong>{t}</strong></p>')
-            else:
-                out.append(f"<h{min(level + 1, 6)}>{t}</h{min(level + 1, 6)}>")
+            out += self.head_html(h, div, level)
         if self.layer == "reg" and any(h.get("next") for h in div.findall(T + "head")):
             self.blocks(div, level, out)      # its paragraph runs on from the head
             return finish(out)
         return out + self.blocks(div, level)
+
+    def head_html(self, h, div, level):
+        """A division's printed head: h{level+1}, or a bold run-in paragraph
+        for RUN_IN_DIVS."""
+        t = self.text(h)
+        if not t:
+            return []
+        if self.layer == "reg" and h.get("prev"):
+            return [RUN_ON + t]             # the review runs it on (join_run_on)
+        if self.layer == "reg" and h.get("next"):
+            return [f"<p>{t}</p>"]          # its paragraph runs on
+        if div.get("type") in self.run_in:
+            return [f'<p class="runin"><strong>{t}</strong></p>']
+        return [f"<h{min(level + 1, 6)}>{t}</h{min(level + 1, 6)}>"]
 
     def layout_file(self, f, ident):
         """Layout mode: one file of the layout as a section, like division()."""
@@ -403,6 +419,9 @@ class HtmlR(R):
         for el in f["parts"]:
             if local(el) == "div":
                 out += self.div_html(el, self.levels.get(el.get("type"), 2))
+            elif local(el) == "head":       # a file starting inside a division
+                div = el.getparent()
+                out += self.head_html(el, div, self.levels.get(div.get("type"), 2))
             else:
                 self.blocks([el], 2, out)      # may run on from the block before
         out = finish(join_run_on(out))
@@ -448,6 +467,17 @@ class HtmlR(R):
                 elif name:
                     inner.insert(0, f"<p>{name}</p>")
                 out += inner
+                continue
+            if n == "note":
+                # a margin note standing loose between blocks (beside a
+                # head): its marker ends the block before
+                t = self.node(c)
+                if t and out and out[-1].endswith("</p>"):
+                    out[-1] = out[-1][:-4] + t + "</p>"
+                elif t and out and re.match(r"<h[1-6]>", out[-1]):
+                    out[-1] = out[-1][:-5] + t + out[-1][-5:]
+                elif t:
+                    out.append(f"<p>{t}</p>")
                 continue
             if n == "label" and c.get("type") == "head":
                 if self.layer == "reg":       # a heading the edition adds
@@ -521,12 +551,20 @@ class HtmlR(R):
                         for h in self.para(x):
                             self.add_block(out, x, h)
             elif n in ("closer", "opener") and getattr(self, "settings", {}).get("CLOSER_PLAIN"):
-                for x in c:             # salute, signature ...: plain paragraphs
+                sig = [True]
+                for x in c:             # salute ...: plain paragraphs; signature: set right
                     if isinstance(x.tag, str) and local(x) != "pb":
+                        if local(x) == "signed":
+                            self.signature(out, x, self.text(x), sig)
+                            continue
                         for h in self.para(x):
                             self.add_block(out, x, h)
             elif n == "closer" and layout.closer_lines(c, self.layer) is not None:
+                sig = [True]
                 for x in layout.closer_lines(c, self.layer):
+                    if local(x) in ("signed", "item"):      # a signatory
+                        self.signature(out, x, self.text(x), sig)
+                        continue
                     for h in self.para(x):
                         self.add_block(out, x, h)
             elif n == "closer":
@@ -542,11 +580,20 @@ class HtmlR(R):
                         if x is last:
                             break
                         before.append(copy.deepcopy(x))
-                    out.append(f'<p class="closer">{self.text(before)}</p>')
                     right = collapse(self.node(last)).strip()
-                    out.append(f'<p class="signature">{right}</p>')
+                    if self.layer == "reg":
+                        sig = [True]
+                        self.signature(out, None, self.text(before), sig)
+                        self.signature(out, None, right, sig)
+                    else:
+                        out.append(f'<p class="closer">{self.text(before)}</p>')
+                        out.append(f'<p class="signature">{right}</p>')
+                elif self.layer == "reg":
+                    self.signature(out, signed, self.text(signed), [True])
                 else:
                     out += self.para(signed, "signature")
+            elif n == "signed":         # a signature standing in the division
+                self.signature(out, c, self.text(c), [True])
             elif n == "trailer":
                 out += self.trailer(c)
             elif n == "div" and self.levels is not None:

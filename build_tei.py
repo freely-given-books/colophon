@@ -147,6 +147,12 @@ def load_tables(path):
 NUMERAL_RE = re.compile(r"\d{1,2}|(?=[IVXLC]+$)[IVXLC]+", re.I)
 ROMAN_RE = re.compile(r"^(?=[IVXLC]+$)M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})$",
                       re.I)
+# reference abbreviations printed in lower case after a verse number's stop
+# ("Rom. 12. ver. 9.", "Judges 6. v. 1."): not the start of a sentence
+REF_ABBREVS = {"v", "ver", "vers", "chap", "ch", "cap", "viz"}
+# an exclamation after one of these runs on: "oh! how", "Ah! you" (the word
+# after it keeps its printed case)
+INTERJECTIONS = {"oh", "ah", "alas", "o"}
 
 
 # ---------------------------------------------------------------------------
@@ -231,8 +237,11 @@ def auto_reg(tok, sentence_start, heading=False, quote_start=False):
         mod = modernize_word_lower(low)
     if heading:
         return apply_case_pattern(w, mod)
+    if sentence_start and w.islower() and low in REF_ABBREVS:
+        sentence_start = False       # "Rom. 12. ver. 9.": the stop ends a number, not a sentence
     if sentence_start:
-        return mod[:1].upper() + mod[1:] if not w.isupper() or len(w) == 1 \
+        k = 1 if mod[:1] in "'’" else 0      # ’tis, ’twas: the letter after the apostrophe
+        return mod[:k + 1].upper() + mod[k + 1:] if not w.isupper() or len(w) == 1 \
             else apply_case_pattern(w, mod)
     if w[:1].isupper() and mod in LOWERCASE_COMMON_NOUNS and not quote_start:
         return mod
@@ -491,6 +500,7 @@ def compute_auto(toks):
                     if re.search(r"[A-Za-z]", t.expanded):
                         state["start"], state["by"] = False, None
                     state["num"] = bool(re.fullmatch(r"\d+", t.expanded))
+                    state["word"] = t.expanded.lower()
             elif t.kind == "punct":
                 p = t.pieces[0]
                 t.orig = p if isinstance(p, str) else (p.text or "")
@@ -500,6 +510,9 @@ def compute_auto(toks):
                     numeral = state.get("num") and state["start"] and \
                         state.get("by") == "block" and t.orig == "."
                     state["start"] = t.orig in ".!?"
+                    if t.orig == "!" and state.get("word") in INTERJECTIONS:
+                        state["start"] = False      # "oh! how", "Ah! you": the sentence goes on
+                    state["word"] = None
                     if not numeral:
                         state["by"] = "punct" if state["start"] else None
                     state["num"] = False
@@ -1394,9 +1407,11 @@ def apply_clusters(clusters, log, unresolved, label, placed=None, flag_of=None,
         inner = {k: placed[j] for k, j in enumerate(idxs) if j in placed}
         if any(in_container(t, ("trailer",)) for t in ts):
             continue
-        # roman list labels are handled as structure
+        # roman list labels are handled as structure (not in a note: there
+        # "v." is a verse, "Prov. 13. 20. v.", and deleting it is an edit)
         if len(ts) == 2 and not new and ts[0].kind == "word" and \
-                ROMAN_RE.match(ts[0].expanded or "") and ts[1].orig == ".":
+                ROMAN_RE.match(ts[0].expanded or "") and ts[1].orig == "." and \
+                not in_container(ts[0], ("note",)):
             continue
         parts = [SPLIT_RE.findall(t.reg if t.reg is not None else t.orig or "") for t in ts]
         if len(ts) == 1:

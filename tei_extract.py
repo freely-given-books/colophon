@@ -428,6 +428,15 @@ def div_blocks(r, div, level=2, lines=None):
         if n == "sp":
             lines += sp_lines(r, c, level)
             continue
+        if n == "note":
+            # a margin note standing loose between blocks (beside a head):
+            # its marker ends the block before
+            t = r.node(c)
+            if t and len(lines) >= 2 and lines[-1] == "" and lines[-2]:
+                lines[-2] += t
+            elif t:
+                lines += [t, ""]
+            continue
         if n == "p" and layout.p_blocks(c, r.layer == "reg"):
             lines += split_p_lines(r, c)
         elif n == "p" or \
@@ -458,18 +467,26 @@ def div_blocks(r, div, level=2, lines=None):
                 if isinstance(x.tag, str) and local(x) == "l":
                     add_block(r, lines, x, r.para(x))
         elif n in ("closer", "opener") and getattr(r, "settings", {}).get("CLOSER_PLAIN"):
-            for x in c:                 # salute, signature ...: plain paragraphs
+            sig = [True]
+            for x in c:                 # salute ...: plain paragraphs; signature: set right
                 if isinstance(x.tag, str) and local(x) not in ("pb",):
-                    add_block(r, lines, x, r.para(x))
+                    if local(x) == "signed":
+                        signature_block(r, lines, x, r.para(x), sig)
+                    else:
+                        add_block(r, lines, x, r.para(x))
         elif n == "closer" and layout.closer_lines(c, r.layer) is not None:
+            sig = [True]
             for x in layout.closer_lines(c, r.layer):
-                add_block(r, lines, x, r.para(x))
+                if local(x) in ("signed", "item"):      # a signatory
+                    signature_block(r, lines, x, r.para(x), sig)
+                else:
+                    add_block(r, lines, x, r.para(x))
         elif n == "closer":
             signed = c.find(T + "signed")
             if signed is None:
                 continue
             his = [x for x in signed if local(x) == "hi"]
-            if his:
+            if his and r.layer != "reg":
                 last = his[-1]
                 before = etree.Element("x")
                 before.text = signed.text
@@ -481,8 +498,24 @@ def div_blocks(r, div, level=2, lines=None):
                 right = collapse(r.node(last)).strip()
                 lines += ["#linebreak()", "#linebreak()", "",
                           f"#align(left)[{left}]", "", f"#align(right)[{right}]", ""]
+            elif his:
+                # the valediction and the name, each a line set right
+                last = his[-1]
+                before = etree.Element("x")
+                before.text = signed.text
+                for x in signed:
+                    if x is last:
+                        break
+                    before.append(copy.deepcopy(x))
+                sig = [True]
+                signature_block(r, lines, None, collapse(r.inline(before)).strip(), sig)
+                signature_block(r, lines, None, collapse(r.node(last)).strip(), sig)
+            elif r.layer == "reg":
+                signature_block(r, lines, signed, r.para(signed), [True])
             else:
                 lines += [f"#align(right)[{r.para(signed)}]", ""]
+        elif n == "signed":             # a signature standing in the division
+            signature_block(r, lines, c, r.para(c), [True])
         elif n == "trailer":
             lines += trailer_lines(r, c)
         elif n == "label" and c.get("type") == "head":
@@ -655,23 +688,26 @@ def div_lines(r, div, level):
     a bold run-in paragraph for RUN_IN_DIVS) and all it contains."""
     lines = []
     for h in div.findall(T + "head"):
-        t = collapse(r.inline(h)).strip()
-        if not t:
-            continue
-        if r.layer == "reg" and h.get("prev"):
-            lines += [RUN_ON + t, ""]       # the review runs it on (join_run_on)
-            continue
-        if r.layer == "reg" and h.get("next"):
-            lines += [t, ""]                # its paragraph runs on (add_block)
-            continue
-        if div.get("type") in r.run_in:
-            enum = getattr(r, "settings", {}).get("TYPST_NUMBERED_PARAGRAPHS") == "enum"
-            lines += [f"#strong[{block_start_escape(t, numerals=not enum)}]", ""]
-        else:
-            lines += [f"{'=' * level} {t}", ""]
+        lines += head_lines(r, h, div, level)
     if r.layer == "reg" and any(h.get("next") for h in div.findall(T + "head")):
         return div_blocks(r, div, level, lines)     # its paragraph runs on (add_block)
     return lines + div_blocks(r, div, level)
+
+
+def head_lines(r, h, div, level):
+    """A division's printed head: a heading line at `level`, or a bold
+    run-in paragraph for RUN_IN_DIVS."""
+    t = collapse(r.inline(h)).strip()
+    if not t:
+        return []
+    if r.layer == "reg" and h.get("prev"):
+        return [RUN_ON + t, ""]             # the review runs it on (join_run_on)
+    if r.layer == "reg" and h.get("next"):
+        return [t, ""]                      # its paragraph runs on (add_block)
+    if div.get("type") in r.run_in:
+        enum = getattr(r, "settings", {}).get("TYPST_NUMBERED_PARAGRAPHS") == "enum"
+        return [f"#strong[{block_start_escape(t, numerals=not enum)}]", ""]
+    return [f"{'=' * level} {t}", ""]
 
 
 def sp_lines(r, sp, level):
@@ -691,9 +727,14 @@ def sp_lines(r, sp, level):
 
 def part_lines(r, el, level, lines):
     """Layout mode: one part of a file, a division or a loose block, added to
-    the file's `lines` (a loose block may run on from the one before it)."""
+    the file's `lines` (a loose block may run on from the one before it). A
+    division's head given as a part of its own (a file that starts inside
+    the division) is set as the division would set it."""
     if local(el) == "div":
         lines += div_lines(r, el, r.levels.get(el.get("type"), level))
+    elif local(el) == "head":
+        div = el.getparent()
+        lines += head_lines(r, el, div, r.levels.get(div.get("type"), level))
     else:
         div_blocks(r, _Loose(el), level, lines)
 
@@ -727,6 +768,23 @@ def add_block(r, lines, c, t):
             lines[-2] += sp + t
     else:
         lines += [t, ""]
+
+
+def signature_block(r, lines, c, t, first):
+    """A signature (a signed line, a signatory): in the edition set right,
+    the first of a closer a line below the paragraph before (house style,
+    every book); in the orig layer a plain block, as printed. One the review
+    runs on into the text (@prev) stays in it. `first` is a one-item list,
+    cleared after the first line."""
+    if not t:
+        return
+    if r.layer != "reg" or (c is not None and c.get("prev")):
+        add_block(r, lines, c if c is not None else etree.Element("x"), t)
+        return
+    if first[0]:
+        lines += ["#v(1em)", ""]
+        first[0] = False
+    lines += [f"#align(right)[{t}]", ""]
 
 
 def quote_lines(r, q):
