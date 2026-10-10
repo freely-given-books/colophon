@@ -528,7 +528,7 @@ def div_blocks(r, div, level=2, lines=None):
             lines += quote_lines(r, c)
         elif n == "div" and getattr(r, "levels", None) is not None:
             lines += div_lines(r, c, r.levels.get(c.get("type"), level + 1))
-        elif n == "div" or (n == "q" and c.find(T + "p") is not None):
+        elif n in ("div", "argument") or (n == "q" and c.find(T + "p") is not None):
             lines += div_blocks(r, c)       # a quotation made of paragraphs too
         else:
             add_block(r, lines, c, r.para(c))

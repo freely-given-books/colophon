@@ -136,6 +136,16 @@ line by line (and keeps CCEL's `<br/>`); in a division that is mostly verse
 (`layout.verse_division`: the Apology, the Conclusion) stanzas are plain
 paragraphs, not `#quote`s.
 
+Owen's *Mortification of Sin* (`.../o/owen/mort.xml`, Goold's text) added:
+a div1 of type "Work" holding the whole book is unwrapped (its div2s are
+the chapters); a "Titlepage" div2 set in `p.h1`-`h4` lines; Goold's page
+breaks (`<pb n>`, kept as TEI `pb`, shown in the side-by-side page);
+`<argument>`, the chapter summaries Owen printed, as `argument/p[@rend="inset"]`
+(set off as the review's `#block(inset: ...)`); a footnote's one `<p>`
+unwrapped; CCEL's index lists. CCEL can drop a line: compare it with the
+printed edition it follows (Goold's scan on archive.org) as well as with
+the early text.
+
 ## Commands
 
 `./fgb` (`fgb.py`; `./fgb --help`) is the day-to-day command; the books
