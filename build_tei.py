@@ -150,6 +150,9 @@ ROMAN_RE = re.compile(r"^(?=[IVXLC]+$)M{0,3}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|
 # reference abbreviations printed in lower case after a verse number's stop
 # ("Rom. 12. ver. 9.", "Judges 6. v. 1."): not the start of a sentence
 REF_ABBREVS = {"v", "ver", "vers", "chap", "ch", "cap", "viz"}
+# an exclamation after one of these runs on: "oh! how", "Ah! you" (the word
+# after it keeps its printed case)
+INTERJECTIONS = {"oh", "ah", "alas", "o"}
 
 
 # ---------------------------------------------------------------------------
@@ -497,6 +500,7 @@ def compute_auto(toks):
                     if re.search(r"[A-Za-z]", t.expanded):
                         state["start"], state["by"] = False, None
                     state["num"] = bool(re.fullmatch(r"\d+", t.expanded))
+                    state["word"] = t.expanded.lower()
             elif t.kind == "punct":
                 p = t.pieces[0]
                 t.orig = p if isinstance(p, str) else (p.text or "")
@@ -506,6 +510,9 @@ def compute_auto(toks):
                     numeral = state.get("num") and state["start"] and \
                         state.get("by") == "block" and t.orig == "."
                     state["start"] = t.orig in ".!?"
+                    if t.orig == "!" and state.get("word") in INTERJECTIONS:
+                        state["start"] = False      # "oh! how", "Ah! you": the sentence goes on
+                    state["word"] = None
                     if not numeral:
                         state["by"] = "punct" if state["start"] else None
                     state["num"] = False
