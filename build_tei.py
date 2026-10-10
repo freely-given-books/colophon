@@ -525,6 +525,7 @@ def compute_auto(toks):
     page_break_spaces(toks)
     if TYPOGRAPHY:
         typography(toks)
+        note_spaces(toks)
 
 
 def page_break_spaces(toks):
@@ -543,6 +544,33 @@ def page_break_spaces(toks):
                 s = Tok("spacing", [""])
                 s.reg, s.resp, s.parent = " ", "#auto", pb.parent
                 ts.insert(i + 1, s)
+        for k, c in enumerate(ts):
+            c.idx = k
+    walk(toks)
+
+
+def note_spaces(toks):
+    """TYPOGRAPHY: CCEL keys some footnotes after the word space ("he was
+    <note>…</note>ready"), which would print the marker loose and glue the
+    next word to it. The space moves after the note: dropped before it and
+    added after it, as #auto spacing readings."""
+    def walk(ts):
+        for t in ts:
+            if t.kind == "container":
+                walk(t.children)
+        for i in range(len(ts) - 2, 0, -1):
+            a, sp, n = ts[i - 1], ts[i], ts[i + 1]
+            if not (sp.kind == "space" and a.kind in ("word", "punct") and
+                    n.kind == "container" and local(n.el) == "note" and
+                    n.el.get("place") == "foot"):
+                continue
+            sp.kind, sp.reg, sp.resp = "spacing", "", "#auto"
+            b = ts[i + 2] if i + 2 < len(ts) else None
+            if b is not None and (b.kind == "word" or
+                                  (b.kind == "punct" and (b.orig or "") in "“‘(\"'")):
+                s = Tok("spacing", [""])
+                s.reg, s.resp, s.parent = " ", "#auto", n.parent
+                ts.insert(i + 2, s)
         for k, c in enumerate(ts):
             c.idx = k
     walk(toks)

@@ -144,7 +144,9 @@ breaks (`<pb n>`, kept as TEI `pb`, shown in the side-by-side page);
 (set off as the review's `#block(inset: ...)`); a footnote's one `<p>`
 unwrapped; CCEL's index lists. CCEL can drop a line: compare it with the
 printed edition it follows (Goold's scan on archive.org) as well as with
-the early text.
+the early text. CCEL keys some footnotes after the word space ("was
+<note/>ready"); a modern text (`TYPOGRAPHY`) moves that space after the
+note as `#auto` spacing readings (`note_spaces`).
 
 ## Commands
 
