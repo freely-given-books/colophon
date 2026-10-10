@@ -467,18 +467,26 @@ def div_blocks(r, div, level=2, lines=None):
                 if isinstance(x.tag, str) and local(x) == "l":
                     add_block(r, lines, x, r.para(x))
         elif n in ("closer", "opener") and getattr(r, "settings", {}).get("CLOSER_PLAIN"):
-            for x in c:                 # salute, signature ...: plain paragraphs
+            sig = [True]
+            for x in c:                 # salute ...: plain paragraphs; signature: set right
                 if isinstance(x.tag, str) and local(x) not in ("pb",):
-                    add_block(r, lines, x, r.para(x))
+                    if local(x) == "signed":
+                        signature_block(r, lines, x, r.para(x), sig)
+                    else:
+                        add_block(r, lines, x, r.para(x))
         elif n == "closer" and layout.closer_lines(c, r.layer) is not None:
+            sig = [True]
             for x in layout.closer_lines(c, r.layer):
-                add_block(r, lines, x, r.para(x))
+                if local(x) in ("signed", "item"):      # a signatory
+                    signature_block(r, lines, x, r.para(x), sig)
+                else:
+                    add_block(r, lines, x, r.para(x))
         elif n == "closer":
             signed = c.find(T + "signed")
             if signed is None:
                 continue
             his = [x for x in signed if local(x) == "hi"]
-            if his:
+            if his and r.layer != "reg":
                 last = his[-1]
                 before = etree.Element("x")
                 before.text = signed.text
@@ -490,8 +498,24 @@ def div_blocks(r, div, level=2, lines=None):
                 right = collapse(r.node(last)).strip()
                 lines += ["#linebreak()", "#linebreak()", "",
                           f"#align(left)[{left}]", "", f"#align(right)[{right}]", ""]
+            elif his:
+                # the valediction and the name, each a line set right
+                last = his[-1]
+                before = etree.Element("x")
+                before.text = signed.text
+                for x in signed:
+                    if x is last:
+                        break
+                    before.append(copy.deepcopy(x))
+                sig = [True]
+                signature_block(r, lines, None, collapse(r.inline(before)).strip(), sig)
+                signature_block(r, lines, None, collapse(r.node(last)).strip(), sig)
+            elif r.layer == "reg":
+                signature_block(r, lines, signed, r.para(signed), [True])
             else:
                 lines += [f"#align(right)[{r.para(signed)}]", ""]
+        elif n == "signed":             # a signature standing in the division
+            signature_block(r, lines, c, r.para(c), [True])
         elif n == "trailer":
             lines += trailer_lines(r, c)
         elif n == "label" and c.get("type") == "head":
@@ -744,6 +768,23 @@ def add_block(r, lines, c, t):
             lines[-2] += sp + t
     else:
         lines += [t, ""]
+
+
+def signature_block(r, lines, c, t, first):
+    """A signature (a signed line, a signatory): in the edition set right,
+    the first of a closer a line below the paragraph before (house style,
+    every book); in the orig layer a plain block, as printed. One the review
+    runs on into the text (@prev) stays in it. `first` is a one-item list,
+    cleared after the first line."""
+    if not t:
+        return
+    if r.layer != "reg" or (c is not None and c.get("prev")):
+        add_block(r, lines, c if c is not None else etree.Element("x"), t)
+        return
+    if first[0]:
+        lines += ["#v(1em)", ""]
+        first[0] = False
+    lines += [f"#align(right)[{t}]", ""]
 
 
 def quote_lines(r, q):

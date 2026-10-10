@@ -178,6 +178,20 @@ class HtmlR(R):
         into is finished (finish()), since a run-on block joins another."""
         return NOTEREF_GAP.sub(r"\1", collapse(self.inline(el)).strip())
 
+    def signature(self, out, c, t, first):
+        """A signature line: in the edition set right, the first of a closer
+        a line below the paragraph before (house style; ebook.css
+        p.signature, p.signature-first); in the orig layer a plain block.
+        One the review runs on into the text (@prev) stays in it."""
+        if not t:
+            return
+        if self.layer != "reg" or (c is not None and c.get("prev")):
+            self.add_block(out, c if c is not None else etree.Element("x"), f"<p>{t}</p>")
+            return
+        cls = "signature signature-first" if first[0] else "signature"
+        first[0] = False
+        out.append(f'<p class="{cls}">{t}</p>')
+
     def para(self, el, cls=None):
         t = self.text(el)
         if not t:
@@ -537,12 +551,20 @@ class HtmlR(R):
                         for h in self.para(x):
                             self.add_block(out, x, h)
             elif n in ("closer", "opener") and getattr(self, "settings", {}).get("CLOSER_PLAIN"):
-                for x in c:             # salute, signature ...: plain paragraphs
+                sig = [True]
+                for x in c:             # salute ...: plain paragraphs; signature: set right
                     if isinstance(x.tag, str) and local(x) != "pb":
+                        if local(x) == "signed":
+                            self.signature(out, x, self.text(x), sig)
+                            continue
                         for h in self.para(x):
                             self.add_block(out, x, h)
             elif n == "closer" and layout.closer_lines(c, self.layer) is not None:
+                sig = [True]
                 for x in layout.closer_lines(c, self.layer):
+                    if local(x) in ("signed", "item"):      # a signatory
+                        self.signature(out, x, self.text(x), sig)
+                        continue
                     for h in self.para(x):
                         self.add_block(out, x, h)
             elif n == "closer":
@@ -558,11 +580,20 @@ class HtmlR(R):
                         if x is last:
                             break
                         before.append(copy.deepcopy(x))
-                    out.append(f'<p class="closer">{self.text(before)}</p>')
                     right = collapse(self.node(last)).strip()
-                    out.append(f'<p class="signature">{right}</p>')
+                    if self.layer == "reg":
+                        sig = [True]
+                        self.signature(out, None, self.text(before), sig)
+                        self.signature(out, None, right, sig)
+                    else:
+                        out.append(f'<p class="closer">{self.text(before)}</p>')
+                        out.append(f'<p class="signature">{right}</p>')
+                elif self.layer == "reg":
+                    self.signature(out, signed, self.text(signed), [True])
                 else:
                     out += self.para(signed, "signature")
+            elif n == "signed":         # a signature standing in the division
+                self.signature(out, c, self.text(c), [True])
             elif n == "trailer":
                 out += self.trailer(c)
             elif n == "div" and self.levels is not None:
