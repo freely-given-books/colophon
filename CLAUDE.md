@@ -166,6 +166,13 @@ unverified tags, into `stable-trial`). It pushes nothing. Two builds of a
 book have the same text but not the same bytes yet: the PDF's creation date
 and the EPUB's `dcterms:modified` and zip times differ.
 
+`./fgb coverage [BOOK]` (`coverage.py`) counts, from the TEI, how faithful an
+edition is to its source: printed words (in the divisions it keeps, not
+`SKIP_DIVISIONS`), the share left as printed, words changed in form
+(spelling, case, punctuation), grammar or wording, words added or removed,
+gaps restored or left open, notes added or dropped. The release catalog
+shows it for each book.
+
 The Typst templates (`@local/fgbooks:X.Y.Z`, `@local/fgbooksLBCF:...`) are
 tags in the `typst/fgbooks-typst` submodule; `./fgb` unpacks the imported
 versions into `~/.cache/fgb-typst/packages` and sets `TYPST_PACKAGE_PATH`

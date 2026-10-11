@@ -54,6 +54,7 @@ import tempfile
 import tomllib
 from pathlib import Path
 
+import coverage
 import fgb
 import packages
 
@@ -509,6 +510,9 @@ def catalog(rid, entries, colophon, trial=False):
             link = f" <{w['url']}>" if w.get("url") else ""
             md.append(f"- witness: {w.get('description', '')}{link}")
         md.append("- files: " + ", ".join(f"`{f['name']}`" for f in e["files"]))
+        md += ["", "Fidelity to the source (counted from the TEI's record of every "
+               "decision; ./fgb coverage):", ""]
+        md += [f"- {line}" for line in coverage.summary(e["coverage"])]
     data = {"release": rid, "colophon": colophon, "books": entries}
     return "\n".join(md) + "\n", json.dumps(data, indent=2, ensure_ascii=False) + "\n"
 
@@ -566,6 +570,7 @@ def cmd_make(a):
                            "signature_verified": s["signed"]},
             "template": template_version(bk),
             "sources": rec.get("source", []), "witnesses": rec.get("witness", []),
+            "coverage": coverage.coverage(bk.tei),
             "files": files})
     if failed:
         sys.exit(f"\nno release: {', '.join(failed)} failed a gate (above). A signed-off "
