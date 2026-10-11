@@ -27,6 +27,9 @@ works from any folder.
                                   checked EPUB into dist/<author>/<book>/;
                                   no BOOK = every book on the TEI pipeline.
                                   --pdf / --epub for one kind, --out DIR
+  ./fgb coverage [BOOK]           how faithful the edition is to its source:
+                                  words as printed, changed in form, grammar
+                                  or wording, gaps restored (coverage.py)
   ./fgb release [--check]         which books are done (signed off, unchanged
                                   since); release.py has the rest:
   ./fgb release record|sign BOOK  a book's RELEASE.toml; the editor's sign-off
@@ -325,6 +328,17 @@ def cmd_changes(a):
     if a.open:
         subprocess.Popen(["xdg-open", str(out)], stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL)
+
+
+def cmd_coverage(a):
+    import coverage
+    for d in ([find_book(a.book)] if a.book else books()):
+        bk = Book(d)
+        if not bk.tei.exists():
+            continue
+        print(bk.name)
+        for line in coverage.summary(coverage.coverage(bk.tei)):
+            print("  " + line)
 
 
 def cmd_check(a):
@@ -628,7 +642,7 @@ def main():
     sub.add_parser("list").set_defaults(fn=cmd_list)
     sub.add_parser("packages").set_defaults(fn=cmd_packages)
     for name, fn in (("sync", cmd_sync), ("check", cmd_check), ("epub", cmd_epub),
-                     ("pdf", cmd_pdf)):
+                     ("pdf", cmd_pdf), ("coverage", cmd_coverage)):
         p = sub.add_parser(name)
         p.add_argument("book", nargs="?")
         p.set_defaults(fn=fn)
@@ -673,7 +687,7 @@ def main():
     a = ap.parse_args()
     if a.cmd == "find":
         a.book, a.word = (a.args[0], a.args[1]) if len(a.args) > 1 else (None, a.args[0])
-    if a.cmd not in ("list", "find", "release"):
+    if a.cmd not in ("list", "find", "release", "coverage"):
         # the Typst templates, from the submodule's tags (packages.py)
         try:
             a.packages = packages.setup()
