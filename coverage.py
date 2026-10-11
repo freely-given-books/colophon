@@ -9,7 +9,8 @@ transcription lacked and whether it was restored.
 Words are the printed text's (the orig layer of text/, the header aside),
 in the divisions the edition keeps: those in the book's SKIP_DIVISIONS (a
 table of contents, an advertisement) are left out of every count. A gap the
-TCP marks as a duplicate (text printed twice) is not missing text.
+TCP marks as a duplicate (text printed twice) is not missing text, and a
+gap in a printed note the edition leaves out is not counted.
 A <choice> counts once, under its effective reading (the editor's when there
 is one, else the machine's); form = spelling, case, punctuation, spacing and
 expanded abbreviations; grammar = archaic forms modernized; wording =
@@ -98,7 +99,11 @@ def coverage(tei):
             c["removed"] += max(0, n_o - n_r)
         c["by_editor" if r.get("resp") == "#editor" else "by_machine"] += 1
     for g in text.iter(T + "gap"):
-        if g.get("reason") == "duplicate":
+        # text printed twice is not missing; a gap in a printed note the
+        # edition leaves out is not in the edition
+        if g.get("reason") == "duplicate" or any(
+                a.tag == T + "note" and a.get("ana") == "#print-only"
+                for a in g.iterancestors()):
             continue
         c["gaps"] += 1
         # restored: supplied letters, or a printed form the edition's reading
