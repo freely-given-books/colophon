@@ -153,6 +153,19 @@ note as `#auto` spacing readings (`note_spaces`).
 `./fgb` (`fgb.py`; `./fgb --help`) is the day-to-day command; the books
 repository's `CLAUDE.md` lists its uses.
 
+`./fgb release` (`release.py`) says which books are done and makes releases
+of them: a book is done when the editor's signed tag `<author>/<book>/vN`
+holds (the folder unchanged since) and it passes the gates (its
+`RELEASE.toml` sources' checksums, a clean folder, `verify.py`, nothing
+unapplied in the review report, Lulu's rules, epubcheck). `make` builds
+every done book into `dist/release/<date>/` with `CATALOG.md`,
+`catalog.json` and `SHA256SUMS`, and commits the repository less every
+other book folder (and its submodules) to the local `stable` branch; it
+refuses a colophon that is not at a release tag (`--trial` takes it, and
+unverified tags, into `stable-trial`). It pushes nothing. Two builds of a
+book have the same text but not the same bytes yet: the PDF's creation date
+and the EPUB's `dcterms:modified` and zip times differ.
+
 The Typst templates (`@local/fgbooks:X.Y.Z`, `@local/fgbooksLBCF:...`) are
 tags in the `typst/fgbooks-typst` submodule; `./fgb` unpacks the imported
 versions into `~/.cache/fgb-typst/packages` and sets `TYPST_PACKAGE_PATH`
