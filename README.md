@@ -45,6 +45,11 @@ Python environment (`.venv`) to the exact versions in `uv.lock`; Typst; Java
 with jing and `tei_all.rng` for validation, and epubcheck, both optional.
 Outside `./fgb`: `uv run --project colophon python colophon/<script>.py`.
 
+`./fgb release` says which books the editor has signed off (a signed tag
+per book version) and makes a release of them: every check again, the
+built files with a catalog and checksums, and a `stable` branch holding
+only those books.
+
 After any change to colophon, `./fgb check --all` rebuilds every book in
 parallel and must find each one as committed.
 

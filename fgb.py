@@ -27,6 +27,11 @@ works from any folder.
                                   checked EPUB into dist/<author>/<book>/;
                                   no BOOK = every book on the TEI pipeline.
                                   --pdf / --epub for one kind, --out DIR
+  ./fgb release [--check]         which books are done (signed off, unchanged
+                                  since); release.py has the rest:
+  ./fgb release record|sign BOOK  a book's RELEASE.toml; the editor's sign-off
+  ./fgb release make              every done book, checked and built, into
+                                  dist/release/<date>/ and the stable branch
 
 BOOK is any part of the book's folder name ("gouge", "perkins", "simon");
 leave it out when you are inside the book's folder.
@@ -336,9 +341,14 @@ def check_all(jobs):
     output of any that fail."""
     import concurrent.futures as cf
     import time
-    dirs = books()
+    # a queued book has its sources but no TEI yet: nothing to check
+    queued = [d for d in books() if not Book(d).tei.exists()]
+    dirs = [d for d in books() if d not in queued]
     jobs = jobs or os.cpu_count() or 2
     print(f"checking {len(dirs)} books, {jobs} at a time ...")
+    if queued:
+        print("no TEI yet, not checked: " +
+              ", ".join(str(d.relative_to(REPO / "books")) for d in queued))
 
     def one(d):
         t = time.time()
@@ -451,7 +461,7 @@ def cover_inputs(geometry):
             "--input", f"trim-height={h}"]
 
 
-def build_pdf(bk, outdir, covers=False):
+def build_pdf(bk, outdir, covers=False, problems=None):
     files = bk.cfg.get("PRINT") or [bk.dir.name + ".typ"]
     cover_files = (bk.cfg.get("COVERS") or
                    sorted(p.name for p in bk.dir.glob("cover*.typ"))) if covers else []
@@ -467,7 +477,9 @@ def build_pdf(bk, outdir, covers=False):
         run("typst", "compile", "--root", REPO, *extra, src, out, cwd=bk.dir)
         outs.append(out)
         if f in files:
-            lulu_check(out)
+            found = lulu_check(out)
+            if problems is not None:
+                problems += [f"{out.name}: {p}" for p in found]
             geometry[f] = pdf_geometry(out)
         elif extra:
             print(f"cover: {geometry[interior_of(f, files)][0]} pages, from "
@@ -482,12 +494,14 @@ def build_pdf(bk, outdir, covers=False):
 def lulu_check(pdf):
     """Lulu's interior rules on a built print PDF (print_check.py): nothing
     within 0.5in of the trim, the inside margin Lulu's for the page count.
-    A broken rule is reported, not fatal: the PDF is still worth looking at."""
+    A broken rule is reported, not fatal: the PDF is still worth looking at
+    (a release, which is, takes the problems returned)."""
     import print_check
     problems, summary = print_check.check(pdf)
     print(f"lulu: {summary}")
     for p in problems:
         print(f"lulu: WARNING {p}")
+    return problems
 
 
 def dist_dir(bk, root=None):
@@ -640,13 +654,26 @@ def main():
     p.add_argument("--new", help=".epub to show as now (default: build it)")
     p.add_argument("--open", action="store_true", help="open it in the browser")
     p.set_defaults(fn=cmd_changes)
+    p = sub.add_parser("release", help="done books and releases of them (release.py)")
+    p.add_argument("action", nargs="?", default="status",
+                   choices=("status", "record", "sign", "make"))
+    p.add_argument("book", nargs="?")
+    p.add_argument("version", nargs="?", help="sign: the version (default: one past the last)")
+    p.add_argument("--check", action="store_true",
+                   help="status: run every gate on each book too (builds them)")
+    p.add_argument("--note", help="sign: a line for the tag message")
+    p.add_argument("--out", help="make: folder for the release (default: dist/release/)")
+    p.add_argument("--trial", action="store_true",
+                   help="make: take unverified sign-offs and an unreleased colophon; "
+                   "commit to stable-trial, publish nothing")
+    p.set_defaults(fn=lambda a: __import__("release").main(a))
     p = sub.add_parser("find")
     p.add_argument("args", nargs="+", metavar="[BOOK] WORD")
     p.set_defaults(fn=cmd_find)
     a = ap.parse_args()
     if a.cmd == "find":
         a.book, a.word = (a.args[0], a.args[1]) if len(a.args) > 1 else (None, a.args[0])
-    if a.cmd not in ("list", "find"):
+    if a.cmd not in ("list", "find", "release"):
         # the Typst templates, from the submodule's tags (packages.py)
         try:
             a.packages = packages.setup()
