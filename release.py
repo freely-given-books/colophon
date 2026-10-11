@@ -16,7 +16,8 @@ rewrites the TEI) holds the book back until the editor signs it off again.
                                  and their checksums), to fill in and commit
   ./fgb release sign BOOK [N]    run the gates on BOOK, then cut the signed
                                  tag <author>/<book>/vN (the editor's step;
-                                 N: one past the last version)
+                                 N: one past the last version,
+                                 tags or books/revisions.json)
   ./fgb release make             a release of every done book: the gates,
                                  then dist/release/<date>/ (PDFs, EPUBs,
                                  covers, CATALOG.md, catalog.json,
@@ -334,20 +335,35 @@ def cmd_record(a):
           "summary, then commit it")
 
 
+REVISIONS = REPO / "books" / "revisions.json"
+
+
+def revisions():
+    """books/revisions.json: every release and the book versions in it
+    ({"releases": [{"release": "2026.03.16", "books": {"<author>/<book>": 2}}]})."""
+    if REVISIONS.exists():
+        return json.loads(REVISIONS.read_text(encoding="utf-8"))
+    return {"releases": []}
+
+
+def record_release(rid, done):
+    """Add (or replace) this release in books/revisions.json; its text."""
+    data = revisions()
+    books = {s["slug"]: version_key(s["tag"]["tag"])[0] for s in done}
+    data["releases"] = [r for r in data["releases"] if r["release"] != rid] + \
+        [{"release": rid, "books": books}]
+    text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    REVISIONS.write_text(text, encoding="utf-8")
+    return text
+
+
 def last_version(d):
-    """The last version of the book: its newest tag, else REVISIONS.md (the
-    Lulu revisions published before sign-off tags: '* <author>/<book> -
-    Version N')."""
+    """The last version of the book: its newest tag, else the highest in
+    books/revisions.json (the Lulu revisions published before sign-off tags)."""
     tags = book_tags(d)
     if tags:
         return version_key(tags[0])[0]
-    rev = REPO / "books" / "REVISIONS.md"
-    if rev.exists():
-        hits = re.findall(rf"^\* {re.escape(slug(d))} - Version (\d+)",
-                          rev.read_text(encoding="utf-8"), re.M)
-        if hits:
-            return max(map(int, hits))
-    return 0
+    return max((r["books"].get(slug(d), 0) for r in revisions()["releases"]), default=0)
 
 
 def cmd_sign(a):
@@ -429,7 +445,7 @@ def gitmodules_without(dropped):
     return "".join(keep) if gone else None
 
 
-def stable_commit(rid, done, catalog_md, catalog_json, branch=BRANCH):
+def stable_commit(rid, done, catalog_md, catalog_json, branch=BRANCH, extra=()):
     """A commit on the local `stable` branch: HEAD's tree with only the done
     books (every other books/<author>/<book>/ folder left out) and the
     catalog. Its parent is the last stable commit, so `git pull` works."""
@@ -446,7 +462,7 @@ def stable_commit(rid, done, catalog_md, catalog_json, branch=BRANCH):
             drop.add("/".join(parts[:3]))
     for p in sorted(drop):
         g("rm", "-r", "--cached", "-q", p)
-    files = [("CATALOG.md", catalog_md), ("catalog.json", catalog_json)]
+    files = [("CATALOG.md", catalog_md), ("catalog.json", catalog_json), *extra]
     modules = gitmodules_without(drop)
     if modules is not None:
         files.append((".gitmodules", modules))
@@ -580,7 +596,9 @@ def cmd_make(a):
     (root / "catalog.json").write_text(js, encoding="utf-8")
     sums = [f"{sha256(f)}  {f.name}" for f in sorted(root.iterdir()) if f.is_file()]
     (root / "SHA256SUMS").write_text("\n".join(sums) + "\n", encoding="utf-8")
-    commit, new = stable_commit(rid, done, md, js, branch)
+    extra = [] if a.trial else [(REVISIONS.relative_to(REPO).as_posix(),
+                                  record_release(rid, done))]
+    commit, new = stable_commit(rid, done, md, js, branch, extra)
     rel = root.relative_to(REPO) if root.is_relative_to(REPO) else root
     print(f"\nrelease {rid}: {len(done)} book(s) in {rel}")
     for e in entries:
@@ -591,6 +609,7 @@ def cmd_make(a):
         return
     if out("rev-parse", "--abbrev-ref", "HEAD") != "main":
         print("note: made from a branch other than main")
+    print(f"\n{REVISIONS.relative_to(REPO)} has the release: commit it on main.")
     print("\nto publish it (nothing has been pushed):\n"
           f"  git push origin {BRANCH}\n"
           f"  git tag -s {rid} {BRANCH} -m 'Release {rid}' && git push origin {rid}\n"
