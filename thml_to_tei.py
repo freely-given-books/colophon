@@ -2,6 +2,11 @@
 """
 thml_to_tei.py: a CCEL ThML file as TEI in the subset the pipeline reads.
 
+A ThML file of our own reads the same way: a transcription made from scans
+(Boston's Crook in the Lot, from McMillan's Whole Works), with a publisherID
+other than "ccel"; the header then names its DC.Publisher and printSourceInfo
+instead of CCEL.
+
 CCEL (ccel.org) publishes its texts as ThML, an HTML-like XML. A book's
 untouched ThML is its provenance, as the TCP file is for an EEBO book
 (source/<id>.thml.xml); the tools read it through sources.load(), which
@@ -290,7 +295,11 @@ def header(thml, path):
     if author:
         tei("author", ts, author)
     ps = tei("publicationStmt", fd)
-    tei("publisher", ps, first(h, ".//DC.Publisher") or "Christian Classics Ethereal Library")
+    # a ThML file of our own (a transcription made from scans, kept in ThML so
+    # it reads like a CCEL text) names its own publisher; CCEL's are "ccel"
+    ccel = (first(h, ".//publisherID") or "ccel").lower() == "ccel"
+    publisher = first(h, ".//DC.Publisher") or "Christian Classics Ethereal Library"
+    tei("publisher", ps, publisher)
     for tag, path_ in (("date", ".//DC.Date"), ("idno", ".//bookID")):
         v = first(h, path_)
         if v:
@@ -304,18 +313,26 @@ def header(thml, path):
     src_info = first(h, ".//printSourceInfo/published") or first(h, ".//DC.Source")
     if src_info:
         tei("note", bibl, src_info)
-    tei("note", bibl, f"Converted from the CCEL ThML file {Path(path).name} by "
-        "colophon's thml_to_tei.py. The text is kept exactly; CCEL gives no page "
-        "or line information, so this transcription is paragraph-faithful, not "
-        "line-faithful.")
+    if ccel:
+        tei("note", bibl, f"Converted from the CCEL ThML file {Path(path).name} by "
+            "colophon's thml_to_tei.py. The text is kept exactly; CCEL gives no page "
+            "or line information, so this transcription is paragraph-faithful, not "
+            "line-faithful.")
+    else:
+        comments = first(h, ".//generalInfo/comments")
+        tei("note", bibl, f"Converted from the ThML file {Path(path).name} by "
+            "colophon's thml_to_tei.py. The text is kept exactly; it is "
+            "paragraph-faithful, not line-faithful." + (f" {comments}" if comments else ""))
     ed = tei("encodingDesc", hdr)
     tei("p", tei("projectDesc", ed),
         "ThML from the Christian Classics Ethereal Library (ccel.org), "
-        "converted to TEI P5 for the Freely Given Books pipeline.")
+        "converted to TEI P5 for the Freely Given Books pipeline." if ccel else
+        f"A ThML transcription ({publisher}), converted to TEI P5 for the "
+        "Freely Given Books pipeline.")
     lu = tei("langUsage", tei("profileDesc", hdr))
     tei("language", lu, "English", ident=first(h, ".//DC.Language") or "en")
     rd = tei("revisionDesc", hdr)
-    tei("change", rd, f"Converted from CCEL ThML ({Path(path).name}).")
+    tei("change", rd, f"Converted from {'CCEL ' if ccel else ''}ThML ({Path(path).name}).")
     return hdr
 
 
