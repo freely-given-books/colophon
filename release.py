@@ -56,7 +56,6 @@ from pathlib import Path
 
 import fgb
 import packages
-import sources
 
 REPO = fgb.REPO
 RECORD = "RELEASE.toml"
@@ -236,9 +235,9 @@ def run_gates(s, outdir, log=print):
     if dirty:
         res["clean"] = [f"uncommitted: {', '.join(dirty[:5])}" +
                         (f" and {len(dirty) - 5} more" if len(dirty) > 5 else "")]
-    log(f"  verify.py ...")
+    log("  verify.py ...")
     res["verify"] = gate_verify(d)
-    log(f"  building ...")
+    log("  building ...")
     files, built = gate_builds(fgb.Book(d), outdir)
     res["print"] = [p for p in built if "EPUB" not in p]
     res["epub"] = [p for p in built if "EPUB" in p]
