@@ -1436,10 +1436,12 @@ def apply_clusters(clusters, log, unresolved, label, placed=None, flag_of=None,
         if any(in_container(t, ("trailer",)) for t in ts):
             continue
         # roman list labels are handled as structure (not in a note: there
-        # "v." is a verse, "Prov. 13. 20. v.", and deleting it is an edit)
+        # "v." is a verse, "Prov. 13. 20. v."; nor in a plain paragraph:
+        # Goold's "II." the edition moves into a heading is a deleted word)
         if len(ts) == 2 and not new and ts[0].kind == "word" and \
                 ROMAN_RE.match(ts[0].expanded or "") and ts[1].orig == "." and \
-                not in_container(ts[0], ("note",)):
+                not in_container(ts[0], ("note",)) and \
+                in_container(ts[0], ("label", "item", "list")):
             continue
         parts = [SPLIT_RE.findall(t.reg if t.reg is not None else t.orig or "") for t in ts]
         if len(ts) == 1:
