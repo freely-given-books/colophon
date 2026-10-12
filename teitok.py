@@ -20,7 +20,11 @@ from lxml import etree
 NS = "http://www.tei-c.org/ns/1.0"
 T = "{%s}" % NS
 
-WORD_RE = re.compile(r"[\w'’]+|\s+|.", re.S)
+# Word characters include combining marks (Greek accents keyed apart from
+# their letters, as CCEL keys Beveridge's Calvin; Hebrew points), as in
+# reviewparse.TOKEN_RE, so "εἰδωλολατρεία" is one word on both sides.
+MARKS = "\u0300-\u036f\u0591-\u05c7\u1dc0-\u1dff\u20d0-\u20ff\ufe20-\ufe2f"
+WORD_RE = re.compile(r"[\w'’" + MARKS + r"]+|\s+|.", re.S)
 
 
 def local(el):
@@ -127,7 +131,7 @@ def tokenize(el, counters, in_note=False, parent_tok=None):
         if kind == "t":
             for m in WORD_RE.finditer(val):
                 s = m.group(0)
-                if re.match(r"[\w'’]", s):
+                if re.match(r"[\w'’" + MARKS + r"]", s):
                     if cur is None:
                         cur = Tok("word")
                     cur.pieces.append(s)

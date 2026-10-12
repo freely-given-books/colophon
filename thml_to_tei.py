@@ -31,6 +31,8 @@ converts it with this module in memory, so there is no intermediate file.
   blockquote                   quote (its p's kept)
   verse / l                    quote / lg / l
   argument                     argument/p[@rend="inset"] (a chapter's summary)
+  p.intro (+ "Sections.")      argument/p[@rend="inset"] (Calvin's section lists)
+  p.introHead (other)          head (a chapter's title under its number)
   note                         note[@place="foot"] (a note's one p unwrapped)
   pb                           pb[@n] (the printed edition CCEL followed)
   ul / ol, li                  list, item (CCEL's indexes)
@@ -131,6 +133,27 @@ def smallcaps(el):
         re.search(r"font-variant:\s*small-caps", el.get("style") or "") is not None
 
 
+def section_summary(src):
+    """p.intro, and the p.introHead "Sections." over them (Beveridge's
+    Calvin: each chapter's summary of its numbered sections)."""
+    c = src.get("class")
+    return c == "intro" or (c == "introHead" and
+                            "".join(src.itertext()).strip().rstrip(".") == "Sections")
+
+
+def in_summary(src, dst):
+    """A plain paragraph between two of a chapter's section summaries is one
+    of them that CCEL left unmarked (Calvin II.8, its "29.")."""
+    k = len(dst) - 1
+    while k >= 0 and dst[k].tag == T + "pb":
+        k -= 1
+    nxt = src.getnext()
+    while nxt is not None and (not isinstance(nxt.tag, str) or nxt.tag == "pb"):
+        nxt = nxt.getnext()
+    return not src.get("class") and k >= 0 and dst[k].tag == T + "argument" and \
+        nxt is not None and nxt.tag == "p" and nxt.get("class") == "intro"
+
+
 def centred(src):
     return (src.get("class") or "").lower() == "centered" or \
         re.search(r"text-align:\s*center", src.get("style") or "") is not None
@@ -158,6 +181,26 @@ def block(src, dst):
         rest.remove(rest[0])
         rest.text = (span.tail or "").lstrip()
         inline(rest, p)
+    elif n == "p" and (section_summary(src) or in_summary(src, dst)):
+        # a chapter's list of its sections (Beveridge's Calvin: "Sections."
+        # and p.intro, one per section), gathered into one argument and set
+        # off as Owen's summaries are: indented both sides
+        # (a page break inside the list goes into it, so it stays one)
+        k = len(dst) - 1
+        while k >= 0 and dst[k].tag == T + "pb":
+            k -= 1
+        last = dst[k] if k >= 0 else None
+        if last is not None and last.tag == T + "argument" and \
+                not (last.tail or "").strip():
+            arg = last
+            for pb in list(dst)[k + 1:]:
+                arg.append(pb)          # moves it (and its tail) inside
+        else:
+            arg = tei("argument", dst)
+        inline(src, tei("p", arg, xml_id=xid(src), rend="inset"))
+    elif n == "p" and src.get("class") == "introHead":
+        # a chapter's title under its "CHAPTER 2." (Beveridge's Calvin)
+        inline(src, tei("head", dst, xml_id=xid(src)))
     elif n == "p":
         p = tei("p", dst, xml_id=xid(src), rend="center" if centred(src) else None)
         inline(src, p)
@@ -232,9 +275,10 @@ def blocks(src, dst):
     for c in src:
         if not isinstance(c.tag, str):
             continue
-        if (c.tag == "a" and not len(c) and not (c.text or "").strip()) or \
-                c.tag == "insertIndex":
-            # an empty link target, CCEL's index marker: only the space stays
+        if (c.tag in ("a", "p") and not len(c) and not (c.text or "").strip()) or \
+                c.tag in ("insertIndex", "hr"):
+            # an empty link target or paragraph, CCEL's index marker, a rule
+            # under a subtitle (Calvin's prefaces): only the space stays
             if len(dst):
                 dst[-1].tail = (dst[-1].tail or "") + (c.tail or "")
             else:
