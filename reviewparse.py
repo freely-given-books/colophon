@@ -287,7 +287,7 @@ def parse_review(text, inline_headings=False, titled=True, edition_heads=False):
                 num, start = l[len("//@enum "):].split("|")
                 scopes[-1][:2] = [num or None, int(start) if start else None]
         lines = [l for l in block.split("\n")
-                 if l.strip() and not l.lstrip().startswith(("//", "#set ", "#import "))]
+                 if l.strip() and not l.lstrip().startswith(("//", "#set ", "#show:", "#import "))]
         if not lines:
             continue
         indent = len(lines[0]) - len(lines[0].lstrip())

@@ -109,6 +109,10 @@ DROP_CAP_CASE = False
 # (GOD, AND, COnsider), set in small capitals (opening_smallcaps).
 OPENING_SMALLCAPS = False
 
+# A function of the TEI root giving the lists that are diagrams (a genealogy
+# printed as a tree): list/@rend="diagram", set whole like an illustration.
+DIAGRAM_LISTS = None
+
 # The early-modern machine pass (spelling engine, sentence case, common-noun
 # lowercasing). A book from a modern source (CCEL) turns it off: its words
 # stay as given, and only TYPOGRAPHY and the review change them.
@@ -139,7 +143,7 @@ def load_tables(path):
                  "MODERNIZE_NOTES", "LATIN_RUNS", "DROP_FOREIGN_GAPS", "GAP_NOTES",
                  "EXPAND_ETC", "ITALIC_SENTENCE_QUIRK", "DROP_CAP_CASE",
                  "MODERNIZE", "TYPOGRAPHY", "DASH", "AUTHOR", "QUOTE_START_CASE",
-                 "OPENING_SMALLCAPS"):
+                 "OPENING_SMALLCAPS", "DIAGRAM_LISTS"):
         if name in ns:
             g[name] = ns[name]
     # the book's own spellings, over the shared table (e.g. Gouge keeps
@@ -3064,6 +3068,9 @@ def add_header(root, editor_name):
         (".//t:reg/t:hi", "hi inside reg: words of this edition's reading set in italic."),
         (".//t:list[@subtype='printed']", "list[@subtype='printed']: a list printed as "
          "one that this edition numbers; the printed numerals are kept in label."),
+        (".//t:list[@rend='diagram']", "list[@rend='diagram']: a diagram printed "
+         "as a list (a genealogy set as a tree), which this edition sets whole, "
+         "like an illustration, never across two pages."),
         (".//t:seg[@type='opening']", "seg[@rend='smallcaps'][@type='opening']: the "
          "first word of a division, printed in capitals after a drop cap, which this "
          "edition sets in small capitals."),
@@ -3248,6 +3255,7 @@ def main():
     rebuild(text, toks)
     if OPENING_SMALLCAPS:
         opening_smallcaps([[d.el] for d in divs])
+    mark_diagrams(root)
     for d in divs:
         if d.extra.get("edition_head"):
             h = etree.Element(T + "head")
@@ -3320,6 +3328,7 @@ def build_layout(args, tree, root, text, toks, files, cfg=None):
     rebuild(text, toks)
     if OPENING_SMALLCAPS:
         opening_smallcaps([f["parts"] for f in files])
+    mark_diagrams(root)
     add_header(root, args.editor)
     write_tei(tree, args.out)
     if args.report:
@@ -3400,6 +3409,13 @@ def opening_smallcaps(blocks):
         if p is not None and walk(p):
             done += 1
     return done
+
+
+def mark_diagrams(root):
+    """DIAGRAM_LISTS: list/@rend="diagram" on each list the book names."""
+    if DIAGRAM_LISTS:
+        for lst in DIAGRAM_LISTS(root):
+            lst.set("rend", "diagram")
 
 
 def write_report(path, log, unresolved):
