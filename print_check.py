@@ -89,8 +89,8 @@ def stray_footnotes(pdf):
             if not first or first[2] < foot:
                 continue                        # not at the foot of the page
             m = re.match(r"\d+", first[0])
-            if not m:
-                continue
+            if not m or first[4] - first[2] >= 0.95 * body:
+                continue                        # a note is set smaller than the text
             # the note expected next, or one of the few after it if a note
             # went unread (numbered paragraphs at the foot are not notes)
             n = next((str(k) for k in range(expect, expect + 4)
