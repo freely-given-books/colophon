@@ -461,9 +461,17 @@ class HtmlR(R):
                 spk = c.find(T + "speaker")
                 name = self.text(spk) if spk is not None else ""
                 k = next((i for i, x in enumerate(inner) if x.startswith("<p")), None)
+                speech = self.layer == "reg" and getattr(self, "settings", {}).get("SPEECH_BLOCKS")
+                if name and speech:
+                    # SPEECH_BLOCKS: p.speech (hung, ebook.css), the name in small caps
+                    m = re.fullmatch(r"(.*?)(\W*)", name, re.S)
+                    name = f'<span class="smallcaps">{m.group(1)}</span>{m.group(2)}'
                 if name and k is not None and inner[k].startswith(("<p>", '<p class="')):
                     j = inner[k].index(">") + 1
-                    inner[k] = inner[k][:j] + name + " " + inner[k][j:]
+                    if speech and inner[k].startswith("<p>"):
+                        inner[k] = '<p class="speech">' + name + " " + inner[k][j:]
+                    else:
+                        inner[k] = inner[k][:j] + name + " " + inner[k][j:]
                 elif name:
                     inner.insert(0, f"<p>{name}</p>")
                 out += inner
@@ -689,6 +697,8 @@ def divisions(root, r, cfg=None, only=None):
         r.settings = dict(getattr(r, "settings", {}), SMALLCAPS=cfg["SMALLCAPS"])
     if (cfg or {}).get("CLOSER_PLAIN"):
         r.settings = dict(getattr(r, "settings", {}), CLOSER_PLAIN=True)
+    if (cfg or {}).get("SPEECH_BLOCKS"):
+        r.settings = dict(getattr(r, "settings", {}), SPEECH_BLOCKS=True)
     if files is not None:
         r.levels, r.run_in = layout.div_levels(cfg)
         for f in files:

@@ -712,17 +712,32 @@ def head_lines(r, h, div, level):
 
 def sp_lines(r, sp, level):
     """A speech: the speaker ("Christian:") opens its first paragraph; any
-    further paragraphs or verse follow as blocks of their own."""
+    further paragraphs or verse follow as blocks of their own. With
+    SPEECH_BLOCKS (reg layer) that paragraph is #speech[...] (the template
+    hangs it) and the name is in small capitals: #smallcaps[Christian]:."""
     lines = div_blocks(r, sp, level)
     spk = sp.find(T + "speaker")
     name = collapse(r.inline(spk)).strip() if spk is not None else ""
-    if name:
-        k = next((i for i, x in enumerate(lines) if x), None)
+    if not name:
+        return lines
+    k = next((i for i, x in enumerate(lines) if x), None)
+    if speech_blocks(r):
+        m = re.fullmatch(r"(.*?)(\W*)", name, re.S)
+        name = f"#smallcaps[{m.group(1)}]{m.group(2)}"
         if k is None or lines[k].startswith("#"):
-            lines[k or 0:k or 0] = [block_start_escape(name), ""]
+            lines[k or 0:k or 0] = [f"#speech[{name}]", ""]
         else:
-            lines[k] = name + " " + lines[k]
+            lines[k] = f"#speech[{name} {lines[k]}]"
+        return lines
+    if k is None or lines[k].startswith("#"):
+        lines[k or 0:k or 0] = [block_start_escape(name), ""]
+    else:
+        lines[k] = name + " " + lines[k]
     return lines
+
+
+def speech_blocks(r):
+    return r.layer == "reg" and getattr(r, "settings", {}).get("SPEECH_BLOCKS")
 
 
 def part_lines(r, el, level, lines):
@@ -807,6 +822,9 @@ def quote_lines(r, q):
     if not text:
         return []
     if layout.verse_division(q):
+        # STANZA_BLOCKS (reg layer): #stanza[...], unindented, set apart
+        if r.layer == "reg" and getattr(r, "settings", {}).get("STANZA_BLOCKS"):
+            return [f"#stanza[{text}]", ""]
         return [text, ""]
     return [f"#quote[{text}]", ""]
 
@@ -839,7 +857,7 @@ def book_settings(tei_path):
     ns = runpy.run_path(str(ed)) if ed.exists() else {}
     return {k: ns[k] for k in ("TYPST_PREAMBLE", "TYPST_HEADING", "TYPST_ENUM",
                                "TYPST_NUMBERED_PARAGRAPHS", "VERSE_LINEBREAKS", "SMALLCAPS",
-                               "CLOSER_PLAIN")
+                               "CLOSER_PLAIN", "SPEECH_BLOCKS", "STANZA_BLOCKS")
             if k in ns}
 
 

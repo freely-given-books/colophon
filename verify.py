@@ -24,6 +24,7 @@ the print edition and the ebook, both made from the TEI, cannot drift apart.
 """
 
 import argparse
+import os
 try:
     import cydifflib as difflib     # difflib compiled: the same matches, faster
 except ImportError:
@@ -167,7 +168,11 @@ def main():
                         + "".join(f'#include "chapters/typ/{f}"\n' for f in chapter_files(reg)))
     try:
         import typst
-        typst.compile(str(book_typ), output=str(bk / "book.pdf"))
+        # the imprint's templates (@local/fgbooks, imported by chapters that
+        # use #speech or #stanza): typst-py does not read TYPST_PACKAGE_PATH
+        pkg = os.environ.get("TYPST_PACKAGE_PATH")
+        typst.compile(str(book_typ), output=str(bk / "book.pdf"),
+                      **({"package_path": pkg} if pkg else {}))
         print("[5] extracted chapters compile with Typst: True")
     except ImportError:
         if shutil.which("typst"):
