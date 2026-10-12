@@ -253,7 +253,10 @@ found per run of 4+ words and left as printed), `DROP_FOREIGN_GAPS`,
 `GAP_NOTES` (text for a missing-pages or unrestorable gap), `EXPAND_ETC`
 ("&c." -> "etc."), `DROP_CAP_CASE` ("AS there" -> "As there") and
 `ITALIC_SENTENCE_QUIRK` (`True`, the Perkins/Simon Magus rule; Gouge
-`"after-stop"`). A `GAP_FIXES` entry may carry a fourth item, the resp
+`"after-stop"`). `OPENING_SMALLCAPS` (Keach): each division's first word,
+printed in capitals after a drop cap (GOD, COnsider), wrapped in
+`seg[@rend="smallcaps"][@type="opening"]`; with `SMALLCAPS = "smallcaps"`
+it prints `#smallcaps[God]`. A `GAP_FIXES` entry may carry a fourth item, the resp
 (`"#editor"` for a gap filled by hand).
 
 Tables are read the way early printers meant them (`layout.table_reading`):
