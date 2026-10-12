@@ -277,6 +277,8 @@ class HtmlR(R):
                 not lst.get("rend") else ""
             if numbered and lst.get("rend"):       # the edition's own numbering
                 cls = f' type="{OL_TYPE.get(lst.get("rend"), "1")}"'
+            if not numbered and lst.get("rend") == "diagram" and self.layer == "reg":
+                cls = ' class="diagram"'           # kept whole (ebook.css)
             first = lst.find(T + "item")
             if numbered and first is not None and first.get("n"):
                 cls += f' start="{first.get("n")}"'

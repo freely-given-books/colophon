@@ -273,6 +273,14 @@ class R:
                 args.append(f"start: {items[0].get('n')}")
         if args:
             lines += [ind + "#[", ind + f"#set enum({', '.join(args)})"]
+        # a diagram (list/@rend="diagram", DIAGRAM_LISTS: a genealogy printed
+        # as a tree) is set whole, like an illustration, never across pages
+        diagram = (self.layer == "reg" and depth == 0 and not numbered and
+                   lst.get("rend") == "diagram")
+        # diagram lists with nothing between them (two trees printed side
+        # by side) are one illustration, in one scope
+        if diagram and not joined_diagram(lst.getprevious(), lst):
+            lines += ["#[", "#show: block.with(breakable: false)"]
         for item in items:
             body = etree.Element("item-body")
             body.text = item.text
@@ -321,9 +329,16 @@ class R:
                     lines += [ind + "  " + t, ""]
                 else:
                     lines += [block_start_escape(t), ""]
-        if args:
+        if args or (diagram and not joined_diagram(lst, lst.getnext())):
             lines.append(ind + "]")
         return lines
+
+
+def joined_diagram(a, b):
+    """Two diagram lists side by side: b straight after a, nothing between."""
+    return (a is not None and b is not None and isinstance(a.tag, str) and
+            isinstance(b.tag, str) and local(a) == local(b) == "list" and
+            a.get("rend") == b.get("rend") == "diagram" and not (a.tail or "").strip())
 
 
 def collapse(s):

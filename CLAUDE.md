@@ -256,7 +256,10 @@ found per run of 4+ words and left as printed), `DROP_FOREIGN_GAPS`,
 `"after-stop"`). `OPENING_SMALLCAPS` (Keach): each division's first word,
 printed in capitals after a drop cap (GOD, COnsider), wrapped in
 `seg[@rend="smallcaps"][@type="opening"]`; with `SMALLCAPS = "smallcaps"`
-it prints `#smallcaps[God]`. A `GAP_FIXES` entry may carry a fourth item, the resp
+it prints `#smallcaps[God]`. `DIAGRAM_LISTS(root)` (Perkins): the lists that
+are diagrams (genealogies printed as trees), `list[@rend="diagram"]`, set
+whole like an illustration in a `#[ #show: block.with(breakable: false) ...]`
+scope (two side by side, nothing between, in one); `ul.diagram` in the ebook. A `GAP_FIXES` entry may carry a fourth item, the resp
 (`"#editor"` for a gap filled by hand).
 
 Tables are read the way early printers meant them (`layout.table_reading`):
