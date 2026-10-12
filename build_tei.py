@@ -105,6 +105,10 @@ ITALIC_SENTENCE_QUIRK = True
 # set the word in ordinary case at the start of the paragraph.
 DROP_CAP_CASE = False
 
+# The first word of each division, printed in capitals after a drop cap
+# (GOD, AND, COnsider), set in small capitals (opening_smallcaps).
+OPENING_SMALLCAPS = False
+
 # The early-modern machine pass (spelling engine, sentence case, common-noun
 # lowercasing). A book from a modern source (CCEL) turns it off: its words
 # stay as given, and only TYPOGRAPHY and the review change them.
@@ -134,7 +138,8 @@ def load_tables(path):
     for name in ("MACRON_M", "GAP_FIXES", "LOWERCASE_COMMON_NOUNS", "REPORT_NOTES",
                  "MODERNIZE_NOTES", "LATIN_RUNS", "DROP_FOREIGN_GAPS", "GAP_NOTES",
                  "EXPAND_ETC", "ITALIC_SENTENCE_QUIRK", "DROP_CAP_CASE",
-                 "MODERNIZE", "TYPOGRAPHY", "DASH", "AUTHOR", "QUOTE_START_CASE"):
+                 "MODERNIZE", "TYPOGRAPHY", "DASH", "AUTHOR", "QUOTE_START_CASE",
+                 "OPENING_SMALLCAPS"):
         if name in ns:
             g[name] = ns[name]
     # the book's own spellings, over the shared table (e.g. Gouge keeps
@@ -3059,6 +3064,9 @@ def add_header(root, editor_name):
         (".//t:reg/t:hi", "hi inside reg: words of this edition's reading set in italic."),
         (".//t:list[@subtype='printed']", "list[@subtype='printed']: a list printed as "
          "one that this edition numbers; the printed numerals are kept in label."),
+        (".//t:seg[@type='opening']", "seg[@rend='smallcaps'][@type='opening']: the "
+         "first word of a division, printed in capitals after a drop cap, which this "
+         "edition sets in small capitals."),
         (".//t:seg[@type='supplied']", "Text the transcription lacks (pages missing "
          "from the copy it was made from) is transcribed from another copy and put in "
          "at the gap: seg[@type='supplied'] where it runs on in a paragraph, and every "
@@ -3238,6 +3246,8 @@ def main():
         apply_list_shape(log)
 
     rebuild(text, toks)
+    if OPENING_SMALLCAPS:
+        opening_smallcaps([[d.el] for d in divs])
     for d in divs:
         if d.extra.get("edition_head"):
             h = etree.Element(T + "head")
@@ -3308,12 +3318,88 @@ def build_layout(args, tree, root, text, toks, files, cfg=None):
         apply_list_shape(log)
         apply_edition_heads(log)
     rebuild(text, toks)
+    if OPENING_SMALLCAPS:
+        opening_smallcaps([f["parts"] for f in files])
     add_header(root, args.editor)
     write_tei(tree, args.out)
     if args.report:
         write_report(args.report, log, unresolved)
     print(f"wrote {args.out}: {len(files)} files, {len(log)} review decisions, "
           f"{len(unresolved)} unresolved")
+
+
+OPENING_SKIP = {"pb", "lb", "milestone", "fw", "note", "anchor", "label", "gap"}
+
+
+def opening_smallcaps(blocks):
+    """OPENING_SMALLCAPS: the first word of each division, printed in capitals
+    after a drop cap (GOD, AND, COnsider), set in small capitals:
+    seg[@rend="smallcaps"][@type="opening"] around it. `blocks` are the first
+    elements of each division (a layout file's parts); the first <p> in them
+    is the opening paragraph. A word printed otherwise is left alone."""
+    def first_p(els):
+        for el in els:
+            p = el if local(el) == "p" else el.find(f".//{T}p")
+            if p is not None:
+                return p
+        return None
+
+    def caps(word):
+        w = word.replace("ſ", "s")
+        return len(w) > 1 and w[0].isupper() and w[1].isupper()
+
+    def wrap_text(parent, attr, owner, index):
+        """Wrap the first letter word of parent.text/.tail; True if wrapped,
+        False if the text holds a word printed otherwise, None if no word."""
+        s = getattr(parent, attr) or ""
+        m = re.search(r"[A-Za-zſ][A-Za-zſ'’-]*", s)
+        if not m:
+            return None
+        if not caps(m.group()):
+            return False
+        seg = etree.Element(T + "seg")
+        seg.set("rend", "smallcaps")
+        seg.set("type", "opening")
+        seg.text, seg.tail = m.group(), s[m.end():]
+        setattr(parent, attr, s[:m.start()])
+        owner.insert(index, seg)
+        return True
+
+    def walk(el):
+        r = wrap_text(el, "text", el, 0)
+        if r is not None:
+            return r
+        for c in list(el):
+            n = local(c)
+            if n == "choice":
+                orig = c.find(T + "orig")
+                word = "".join((orig if orig is not None else c).itertext())
+                if not caps(word):
+                    return False
+                seg = etree.Element(T + "seg")
+                seg.set("rend", "smallcaps")
+                seg.set("type", "opening")
+                seg.tail, c.tail = c.tail, None
+                el.replace(c, seg)
+                seg.append(c)
+                return True
+            if n == "hi" or n == "seg":
+                r = walk(c)
+                if r is not None:
+                    return r
+            elif n not in OPENING_SKIP:
+                return False
+            r = wrap_text(c, "tail", el, list(el).index(c) + 1)
+            if r is not None:
+                return r
+        return None
+
+    done = 0
+    for els in blocks:
+        p = first_p(els)
+        if p is not None and walk(p):
+            done += 1
+    return done
 
 
 def write_report(path, log, unresolved):
