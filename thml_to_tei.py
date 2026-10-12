@@ -34,7 +34,8 @@ converts it with this module in memory, so there is no intermediate file.
   note                         note[@place="foot"] (a note's one p unwrapped)
   pb                           pb[@n] (the printed edition CCEL followed)
   ul / ol, li                  list, item (CCEL's indexes)
-  span.sc (small capitals)     seg[@rend="smallcaps"]
+  span.sc, or font-variant:small-caps style (small capitals)
+                               seg[@rend="smallcaps"]
   br                           lb
   i / em, b / strong           hi[@rend="italic"] / hi[@rend="bold"]
   scripRef                     ref[@type="scripture"][@cRef] (OSIS reference)
@@ -115,12 +116,19 @@ def inline(src, dst):
         elif n in ("span", "a", "font", "sup", "sub", "name", "added", "foreign", "cite"):
             el = tei("hi" if n in ("sup", "sub") else "seg", dst,
                      rend=n if n in ("sup", "sub") else
-                     "smallcaps" if c.get("class") == "sc" else None)
+                     "smallcaps" if smallcaps(c) else None)
             inline(c, el)
         else:
             raise ValueError(f"ThML <{n}> inside a paragraph is not handled yet "
                              f"(id {c.get('id')})")
         el.tail = c.tail
+
+
+def smallcaps(el):
+    """CCEL's small capitals: span.sc, or (Goold's Owen) an inline
+    font-variant:small-caps style."""
+    return el.get("class") == "sc" or \
+        re.search(r"font-variant:\s*small-caps", el.get("style") or "") is not None
 
 
 def centred(src):
