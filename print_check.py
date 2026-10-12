@@ -66,29 +66,48 @@ def words_of(pdf):
 
 def stray_footnotes(pdf):
     """Footnotes whose text is set on another page than their marker: [(n,
-    note page, marker page)]. A note is a small number opening a line at the
-    foot of the page; its marker, the same number set small after a word
-    on its line ("Suffield¹")."""
+    note page, marker page)]. A note is a line at the foot of the page that
+    opens with its number; its marker, the same number after a word on its
+    line. In a font without superscript figures (Liberation) the numbers are
+    set small, as words of their own ("Suffield ¹"); in one with them
+    (Libertinus) they are full-height digits joined to the word ("that40",
+    "40Phil."), told apart by the notes' running order (one numbering
+    through the book, as the template sets it)."""
     pages = words_of(pdf)
     heights = [w[4] - w[2] for pg in pages for ln in pg for w in ln if w[0].isalpha()]
     if not heights:
         return []
     body = statistics.median(heights)
-    out = []
+    small = lambda w: w[4] - w[2] <= 0.8 * body
+    out, expect = [], 1
     for i, pg in enumerate(pages):
+        if not pg:
+            continue
+        foot = 0.6 * max(w[4] for l in pg for w in l)
         for ln in pg:
             first = ln[0] if ln else None
-            if not first or not first[0].isdigit() or first[4] - first[2] > 0.8 * body:
-                continue
-            if first[2] < 0.6 * max(w[4] for l in pg for w in l):
+            if not first or first[2] < foot:
                 continue                        # not at the foot of the page
-            n = first[0]
+            m = re.match(r"\d+", first[0])
+            if not m:
+                continue
+            # the note expected next, or one of the few after it if a note
+            # went unread (numbered paragraphs at the foot are not notes)
+            n = next((str(k) for k in range(expect, expect + 4)
+                      if (small(first) and first[0] == str(k)) or
+                      (not small(first) and first[0].startswith(str(k)))), None)
+            if n is None:
+                continue
+            expect = int(n) + 1
+            glued = re.compile(r"[^\d\s]" + n + r"[,.;:)\]’”]*$")
 
             def has_marker(k):
-                # the number set small after a word on its line
-                return 0 <= k < len(pages) and any(
-                    w[0] == n and j > 0 and w[4] - w[2] <= 0.8 * body
-                    for l in pages[k] for j, w in enumerate(l))
+                if not (0 <= k < len(pages)) or not pages[k]:
+                    return False
+                fk = 0.6 * max(w[4] for l in pages[k] for w in l)
+                return any((w[0] == n and j > 0 and small(w)) or
+                           (glued.search(w[0]) and (w[2] < fk or j > 0))
+                           for l in pages[k] for j, w in enumerate(l))
             if has_marker(i):
                 continue
             for k in (i + 1, i - 1):
