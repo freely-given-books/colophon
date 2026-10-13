@@ -358,12 +358,12 @@ def record_release(rid, done):
 
 
 def last_version(d):
-    """The last version of the book: its newest tag, else the highest in
-    books/revisions.json (the Lulu revisions published before sign-off tags)."""
+    """The last version of the book: the higher of its newest tag and the
+    highest in books/revisions.json (the Lulu revisions published before
+    sign-off tags, which a tag from a withdrawn release can lag behind)."""
     tags = book_tags(d)
-    if tags:
-        return version_key(tags[0])[0]
-    return max((r["books"].get(slug(d), 0) for r in revisions()["releases"]), default=0)
+    tagged = version_key(tags[0])[0] if tags else 0
+    return max([tagged] + [r["books"].get(slug(d), 0) for r in revisions()["releases"]])
 
 
 def cmd_sign(a):
