@@ -1656,7 +1656,8 @@ def between_blocks(x):
     par = x.parent
     return isinstance(par, View) or par is None or par.el is None or \
         local(par.el) in ("div", "list", "body", "front", "back", "text", "group",
-                          "lg", "sp", "closer", "opener", "epigraph")
+                          "lg", "sp", "closer", "opener", "epigraph",
+                          "table", "row")      # between cells: the reading joins them
 
 
 def apply_spacing(root_tok, order, sp, log, label, skip_notes=True, owner=None):
@@ -1982,7 +1983,17 @@ def review_division(d, review, f, log, unresolved):
         note_spacing.append((note_tok, nt, nowner))
         # does the review keep the note where it was printed?
         k = prev_word(nt["anchor"])
-        src_prev = next((e for e in reversed(body[:a]) if e[1] == "w"), None)
+        # the printed word before it; a printed number the review leaves
+        # out ("1." of a list the edition numbers itself) is passed over
+        kept = {id(o) for o in owner.values()}
+        ws = [e for e in body[:a] if e[1] == "w"]
+        n = 0
+        while n < len(ws) and id(ws[-1 - n][2]) not in kept and \
+                re.fullmatch(r"\d{1,3}|[ivxlcIVXLC]{1,6}|[.)]", ws[-1 - n][0]):
+            n += 1
+        if not any(re.fullmatch(r"\d{1,3}|[ivxlcIVXLC]{1,6}", e[0]) for e in ws[len(ws) - n:]):
+            n = 0
+        src_prev = ws[-1 - n] if n < len(ws) else None
         if k < 0 or src_prev is None:
             if k < 0 and src_prev is None:
                 continue
@@ -2579,10 +2590,23 @@ def restructure(splits, log):
             tables.setdefault(id(s[0]), (s[0], []))[1].append(s)
     for tb, ss in tables.values():
         marks = [m for m, _c in layout.table_reading(tb.el)[1] if m]
-        if len(ss) == len(marks):
+        # a table that opens its paragraph: its first line is the review's
+        # paragraph start, which is not a split
+        kids = tb.parent.children if tb.parent is not None else []
+        k = next((i for i, c in enumerate(kids) if c is tb), 0)
+        opens = local(tb.parent.el) == "p" and not any(
+            has_words(c) for c in kids[:k]
+            if not (c.kind == "container" and local(c.el) == "note"))
+        if len(ss) == len(marks) or opens and len(ss) == len(marks) - 1:
             tb.el.set("rend", "inline")
             tb.el.set("change", "#review")
             log.append((ss[0][4], "list", "table", "run into its sentence"))
+            if opens and len(ss) == len(marks) and not min(ss, key=lambda x: x[3])[2]:
+                # its first line ran on too (no paragraph starts there in the
+                # review): the paragraph continues the one before
+                ws = first_words(tb, 1)
+                if ws:
+                    splits.append((ws[0], "merge", [], ss[0][3], ss[0][4]))
         else:
             log.append((ss[0][4], "unresolved", "table",
                         f"{len(ss)} of its {len(marks)} lines run on; kept as is"))
@@ -2859,7 +2883,8 @@ def collect_splits(struct, stream_index, log):
         if tabs and len(tabs) == len(s["src_marks"]) and s["tgt_marks"] in ([], ["¶"]):
             # a table's reading the review runs into one sentence
             # (restructure checks that every one of its marks went)
-            splits += [(tb, "tableinline", [], order, s["label"]) for tb in tabs]
+            splits += [(tb, "tableinline", list(s["tgt_marks"]), order, s["label"])
+                       for tb in tabs]
             continue
         if s["tgt_marks"] == ["+"] and not s["src_marks"]:
             labels = []

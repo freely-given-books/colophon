@@ -218,7 +218,15 @@ class R:
         if n == "table" and self.layer == "reg":
             # read into its sentence, column by column (layout.table_reading)
             _mode, blocks = layout.table_reading(c)
-            return " ".join(self.inline(cell) for _m, cells in blocks for cell in cells)
+            # a cell whose reading opens with punctuation (the review's
+            # "exceed: in the necessity") follows the one before unspaced
+            out = ""
+            for cell in (cell for _m, cells in blocks for cell in cells):
+                t = self.inline(cell)
+                if not t.strip():
+                    continue
+                out += ("" if not out or re.match(r"\s*[,.;:)]", t) else " ") + t
+            return out
         return self.inline(c, in_numbered)                 # seg, q, bibl, ...
 
     def choice(self, c):
