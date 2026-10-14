@@ -610,7 +610,9 @@ def whole_emph(body):
 
 
 def epigraph_block(ref, body, after=False):
-    lines = ["#align(center)[", "  #block(width: 85%)[", "    #set par(justify: false)"]
+    # never split across pages: with its heading (sticky) it moves on whole
+    lines = ["#align(center)[", "  #block(width: 85%, breakable: false)[",
+             "    #set par(justify: false)"]
     ref_line = [f"    #text(size: 0.9em, weight: 600)[{ref}]"] if ref else []
     if ref and not after:
         lines += ref_line + [""]
