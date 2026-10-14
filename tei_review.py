@@ -250,8 +250,6 @@ header.top h1 { font-size:16px; margin:0 0 4px; }
 .controls { display:flex; flex-wrap:wrap; gap:4px 14px; align-items:center; }
 .controls label { white-space:nowrap; cursor:pointer; }
 .controls select { font:inherit; }
-nav.toc { padding:12px 16px; font:14px/1.6 system-ui,sans-serif; }
-nav.toc a { color:inherit; }
 main { max-width:1500px; margin:0 auto; padding:0 16px 80px; }
 section.div { margin-top:36px; }
 section.div > h2 { font-size:22px; margin:0 0 4px; }
@@ -288,15 +286,41 @@ a.noteref sup { color:var(--edln); }
 body.only-orig .row > .reg, body.only-reg .row > .orig { display:none; }
 body.only-orig .row, body.only-reg .row { grid-template-columns:1fr; max-width:760px; }
 @media (max-width:760px) {
-  .row { grid-template-columns:1fr; gap:6px; }
-  .row > .orig { border-left:3px solid var(--rule); padding-left:8px; font-size:15px; }
+  .row { grid-template-columns:1fr; gap:0; }
+  /* the printed text: a tinted, labelled box; the edition: plain, labelled */
+  .row > .orig { background:var(--panel); border-left:3px solid var(--pb);
+    border-radius:4px; padding:6px 10px; font-size:15px; margin:2px 0 8px; }
+  .row > .orig:empty { display:none; }
+  .row > .orig::before, body.both .row > .reg::before { display:block;
+    font:600 11px/1.8 system-ui,sans-serif; letter-spacing:.06em;
+    text-transform:uppercase; color:var(--muted); }
+  body.both .row > .reg::before { content:"Edition"; }
+  .row.head > .orig::before, body.both .row.head > .reg::before { content:none; }
   .colhead { display:none; }
   header.top { padding:6px 12px; }
-  header.top h1 { font-size:14px; margin:0; white-space:nowrap; overflow:hidden;
-    text-overflow:ellipsis; }
+  header.top h1 { font-size:13px; margin:0 0 4px; display:-webkit-box;
+    -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   main { padding:0 12px 80px; }
   section.div { margin-top:24px; }
+  details.toc { padding:8px 12px; }
 }
+/* Edition / Printed / Both */
+.seg { display:inline-flex; border:1px solid var(--rule); border-radius:6px;
+  overflow:hidden; margin:2px 0 4px; }
+.seg button { font:600 13px/1 system-ui,sans-serif; padding:7px 12px; border:0;
+  background:transparent; color:var(--fg); cursor:pointer; }
+.seg button + button { border-left:1px solid var(--rule); }
+.seg button[aria-pressed="true"] { background:var(--fg); color:var(--bg); }
+/* in the edition alone, a paragraph's printed text opens under it */
+.peek { display:none; font:600 11px/1 system-ui,sans-serif; letter-spacing:.04em;
+  color:var(--muted); background:none; border:1px solid var(--rule);
+  border-radius:10px; padding:4px 9px; margin:2px 0 6px; cursor:pointer; }
+body.only-reg .peek { display:inline-block; }
+body.only-reg .row.open > .orig { display:block; order:2; }
+.row.open .peek { color:var(--fg); border-color:var(--pb); }
+details.toc { padding:12px 16px; font:14px/1.6 system-ui,sans-serif; }
+details.toc > summary { cursor:pointer; color:var(--muted); width:max-content; }
+details.toc a { color:inherit; }
 details.opts > summary { cursor:pointer; color:var(--muted); width:max-content; }
 details.opts[open] > summary { margin-bottom:4px; }
 .legend { display:none; margin:6px 0 0; color:var(--muted); }
@@ -323,12 +347,32 @@ auto.addEventListener('change', fa); fa();
 const pages = document.getElementById('pages');
 const fp = () => b.classList.toggle('no-pages', !pages.checked);
 pages.addEventListener('change', fp); fp();
-const cols = document.getElementById('cols');
-cols.addEventListener('change', () => {
-  b.classList.toggle('only-orig', cols.value === 'orig');
-  b.classList.toggle('only-reg', cols.value === 'reg'); });
-// phones: options folded away, and a tap on a marked word shows its readings
+// Edition / Printed / Both: phones start with the edition, wide screens with both
 const narrow = matchMedia('(max-width:760px)');
+const segs = document.querySelectorAll('.seg button');
+function setCols(v) {
+  b.classList.toggle('only-orig', v === 'orig');
+  b.classList.toggle('only-reg', v === 'reg');
+  b.classList.toggle('both', v === 'both');
+  segs.forEach(x => x.setAttribute('aria-pressed', String(x.dataset.c === v)));
+  try { localStorage.setItem('cols', v); } catch (e) {}
+  hdr();
+}
+segs.forEach(x => x.addEventListener('click', () => setCols(x.dataset.c)));
+let saved = null;
+try { saved = localStorage.getItem('cols'); } catch (e) {}
+setCols(saved || (narrow.matches ? 'reg' : 'both'));
+// each paragraph: a button that opens its printed text under the edition's
+document.querySelectorAll('.row:not(.colhead):not(.head):not(.modern)').forEach(r => {
+  const o = r.querySelector(':scope > .orig'), m = r.querySelector(':scope > .reg');
+  if (!o || !m || !o.textContent.trim()) return;
+  const p = document.createElement('button');
+  p.className = 'peek'; p.type = 'button'; p.textContent = PEEK;
+  p.addEventListener('click', () => r.classList.toggle('open'));
+  m.appendChild(p);
+});
+if (!narrow.matches) document.querySelector('details.toc').open = true;
+// phones: options folded away, and a tap on a marked word shows its readings
 if (narrow.matches) document.querySelector('details.opts').open = false;
 document.querySelector('details.opts').addEventListener('toggle', hdr);
 const tip = document.getElementById('tip');
@@ -354,22 +398,22 @@ def page(title, year, sections, toc):
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{html.escape(title)} (side by side)</title>
-<style>{CSS}{hide}</style></head>
+<style>{CSS}{hide}
+@media (max-width:760px) {{ .row > .orig::before {{ content:"Printed {year}"; }} }}</style></head>
 <body>
 <header class="top"><h1>{html.escape(title)}: printed {year} and edition</h1>
+<div class="seg" role="group" aria-label="Show"><button type="button" data-c="reg">Edition</button><button type="button" data-c="orig">Printed {year}</button><button type="button" data-c="both">Both</button></div>
 <details class="opts" open><summary>Options</summary>
 <div class="controls"><span>Mark editor changes:</span>{boxes}
 <label><input type="checkbox" id="auto"> underline machine changes</label>
 <label><input type="checkbox" id="pages" checked> printed pages</label>
-<label>show <select id="cols"><option value="both">both columns</option>
-<option value="orig">printed only</option><option value="reg">edition only</option></select></label>
 </div>
-<p class="legend">Each printed passage (with a bar at its left) is followed by the edition's.
-Tap a marked word to see what was printed and who changed it.</p></details></header>
-<nav class="toc">{toc}</nav>
+<p class="legend">Marked words were changed by the edition: tap one to see what was
+printed and who changed it. “Printed {year}” under a paragraph opens the printed text.</p></details></header>
+<details class="toc"><summary>Contents</summary><nav>{toc}</nav></details>
 <main>{sections}</main>
 <div id="tip" hidden></div>
-<script>{JS}</script>
+<script>const PEEK = "Printed {year}";{JS}</script>
 </body></html>
 """
 
