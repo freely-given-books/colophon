@@ -743,10 +743,14 @@ def head_lines(r, h, div, level):
     if r.layer == "reg" and h.get("prev"):
         return [RUN_ON + t, ""]             # the review runs it on (join_run_on)
     if r.layer == "reg" and h.get("next"):
-        return [t, ""]                      # its paragraph runs on (add_block)
+        return [block_start_escape(t), ""]  # its paragraph runs on (add_block)
     if div.get("type") in r.run_in:
         enum = getattr(r, "settings", {}).get("TYPST_NUMBERED_PARAGRAPHS") == "enum"
-        return [f"#strong[{block_start_escape(t, numerals=not enum)}]", ""]
+        t = block_start_escape(t, numerals=not enum)
+        if r.layer == "reg" and div.get("type") in \
+                getattr(r, "settings", {}).get("RUN_IN_PLAIN", ()):
+            return [t, ""]                  # set as the paragraph it was printed as
+        return [f"#strong[{t}]", ""]
     return [f"{'=' * level} {t}", ""]
 
 
@@ -897,7 +901,8 @@ def book_settings(tei_path):
     ns = runpy.run_path(str(ed)) if ed.exists() else {}
     return {k: ns[k] for k in ("TYPST_PREAMBLE", "TYPST_HEADING", "TYPST_ENUM",
                                "TYPST_NUMBERED_PARAGRAPHS", "VERSE_LINEBREAKS", "SMALLCAPS",
-                               "CLOSER_PLAIN", "SPEECH_BLOCKS", "STANZA_BLOCKS")
+                               "CLOSER_PLAIN", "SPEECH_BLOCKS", "STANZA_BLOCKS",
+                               "RUN_IN_PLAIN")
             if k in ns}
 
 

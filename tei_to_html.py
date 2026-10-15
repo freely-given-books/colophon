@@ -434,6 +434,9 @@ class HtmlR(R):
         if self.layer == "reg" and h.get("next"):
             return [f"<p>{t}</p>"]          # its paragraph runs on
         if div.get("type") in self.run_in:
+            if self.layer == "reg" and div.get("type") in \
+                    getattr(self, "settings", {}).get("RUN_IN_PLAIN", ()):
+                return [f"<p>{t}</p>"]      # set as the paragraph it was printed as
             return [f'<p class="runin"><strong>{t}</strong></p>']
         return [f"<h{min(level + 1, 6)}>{t}</h{min(level + 1, 6)}>"]
 
@@ -731,6 +734,8 @@ def divisions(root, r, cfg=None, only=None):
         r.settings = dict(getattr(r, "settings", {}), CLOSER_PLAIN=True)
     if (cfg or {}).get("SPEECH_BLOCKS"):
         r.settings = dict(getattr(r, "settings", {}), SPEECH_BLOCKS=True)
+    if (cfg or {}).get("RUN_IN_PLAIN"):
+        r.settings = dict(getattr(r, "settings", {}), RUN_IN_PLAIN=set(cfg["RUN_IN_PLAIN"]))
     if files is not None:
         r.levels, r.run_in = layout.div_levels(cfg)
         for f in files:

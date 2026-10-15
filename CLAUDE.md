@@ -104,7 +104,11 @@ overrides), so the ebook and the Typst chapters cannot drift apart.
     `table[@rend="parallel"][@n]` (`PARALLEL_TABLES`) two printed tables
     "laid even one against another" (the parallel of duties), set as two
     columns item against item: `#[ ... ] <parallel>` in the chapters (the
-    template's `parallel`), a paired `table.parallel` in the ebook; blocks the
+    template's `parallel`), a paired `table.parallel` in the ebook;
+    `seg[@type="after-list"]` words printed at the end of a list's last
+    item that the edition sets after the list as a paragraph;
+    `RUN_IN_PLAIN` (editorial.py) run-in heads of these division types set
+    as plain paragraphs (Gouge's questions, as 1622 prints them); blocks the
     review deletes whole (margin matter moved into a note) stay, emptied,
     and the paragraph runs on past them
 - The header (`editorialDecl`, `respStmt`, `revisionDesc`) documents the
