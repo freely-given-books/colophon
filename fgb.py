@@ -388,12 +388,12 @@ def check_all(jobs):
     return 1 if failed else 0
 
 
-def render_front(bk, cover, outdir, extra=()):
+def render_front(bk, cover, outdir, extra=(), root=REPO):
     """The front panel of a panel_cover.typ cover as an image at the trim
     size, 150 ppi: the ebook cover, and the picture for a web page."""
     img = outdir / (cover.stem + "-front.png")
-    print(f"typst: {cover.relative_to(REPO)} (front panel)")
-    run("typst", "compile", "--root", REPO, "--input", "front-only=true", *extra,
+    print(f"typst: {cover.relative_to(root)} (front panel)")
+    run("typst", "compile", "--root", root, "--input", "front-only=true", *extra,
         "--format", "png", "--ppi", "150", cover, img, cwd=bk.dir)
     return img
 
@@ -475,7 +475,9 @@ def cover_inputs(geometry):
             "--input", f"trim-height={h}"]
 
 
-def build_pdf(bk, outdir, covers=False, problems=None):
+def build_pdf(bk, outdir, covers=False, problems=None, root=REPO):
+    """The print PDFs (and covers) into outdir. root: the repository the book
+    is in (another checkout of it, for a book as it was at a sign-off)."""
     files = bk.cfg.get("PRINT") or [bk.dir.name + ".typ"]
     cover_files = (bk.cfg.get("COVERS") or
                    sorted(p.name for p in bk.dir.glob("cover*.typ"))) if covers else []
@@ -483,12 +485,12 @@ def build_pdf(bk, outdir, covers=False, problems=None):
     for f in files + cover_files:
         src = bk.dir / f
         out = outdir / Path(f).with_suffix(".pdf").name
-        print(f"typst: {src.relative_to(REPO)}")
+        print(f"typst: {src.relative_to(root)}")
         # a cover is given its interior's page count and trim (panel_cover.typ
         # takes them from --input), so its spine cannot fall out of step
         extra = cover_inputs(geometry.get(interior_of(f, files))) if f in cover_files else []
         # --root: covers import the shared design from scripts/
-        run("typst", "compile", "--root", REPO, *extra, src, out, cwd=bk.dir)
+        run("typst", "compile", "--root", root, *extra, src, out, cwd=bk.dir)
         outs.append(out)
         if f in files:
             found = lulu_check(out)
@@ -501,7 +503,7 @@ def build_pdf(bk, outdir, covers=False, problems=None):
     for f in cover_files:
         if "panel-cover(" in (bk.dir / f).read_text(encoding="utf-8"):
             outs.append(render_front(bk, bk.dir / f, outdir,
-                                     cover_inputs(geometry.get(interior_of(f, files)))))
+                                     cover_inputs(geometry.get(interior_of(f, files))), root))
     return outs
 
 
@@ -676,6 +678,9 @@ def main():
     p.add_argument("--check", action="store_true",
                    help="status: run every gate on each book too (builds them)")
     p.add_argument("--note", help="sign: a line for the tag message")
+    p.add_argument("--ebook", action="store_true",
+                   help="sign: an ebook-only version (vN.1, vN.2, ...); the print "
+                   "must be the same as at the last sign-off")
     p.add_argument("--out", help="make: folder for the release (default: dist/release/)")
     p.add_argument("--trial", action="store_true",
                    help="make: take unverified sign-offs and an unreleased colophon; "
