@@ -17,7 +17,7 @@ the TEI root element and returning a list of files, in reading order:
      "parts": [el, el, ...]}               # TEI elements, in order
 
 A part that is a <div> is set with its own heading (DIV_LEVELS gives the
-heading level by div type; RUN_IN_DIVS are set as a bold run-in paragraph
+heading level by div type; RUN_IN_DIVS are set as a bold run-in paragraph (RUN_IN_PLAIN: as a plain one)
 instead) and everything in it, nested divisions included. Any other element
 (a paragraph, an epigraph) is a loose block of a division, set as it stands.
 The file title is the edition's, so it lives in the layout, not in the TEI;
