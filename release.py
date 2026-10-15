@@ -18,12 +18,9 @@ rewrites the TEI) holds the book back until the editor signs it off again.
                                  tag <author>/<book>/vN (the editor's step;
                                  N: one past the last version,
                                  tags or books/revisions.json)
-  ./fgb release sign BOOK --ebook
-                                 an ebook-only version, vN.1, vN.2, ...: the
-                                 print PDFs and covers must be the same as at
-                                 the last sign-off, page for page as
-                                 rendered, so the print stays Lulu's
-                                 revision N
+  ./fgb release sign BOOK --point
+                                 a point version, vN.1, vN.2, ...: an
+                                 improved edition between Lulu revisions
   ./fgb release make             a release of every done book: the gates,
                                  then dist/release/<date>/ (PDFs, EPUBs,
                                  covers, CATALOG.md, catalog.json,
@@ -44,9 +41,11 @@ The gates, every one of which a done book must pass:
   print     the print PDFs build with nothing against Lulu's rules
   epub      the EPUB builds and passes epubcheck
 
-Versions: a whole number vN is a print revision and matches Lulu's revision N
-(books/revisions.json keeps the whole numbers). A point version vN.M changes
-only the ebook: its print files are released under vN, its EPUB under vN.M.
+Versions: a whole number vN is a print revision and matches Lulu's revision N.
+A point version vN.M is an improved edition between Lulu revisions (an ebook
+fix, a correction not yet sent to Lulu): every file of it is named vN.M, and
+the next whole version is still N+1. Its sign-off says whether its print is
+still revision N's, page for page as rendered (the tag message, the catalog).
 
 Signatures are checked against `allowed_signers` at the books repository's
 root (ssh-keygen's format), so anyone can check a tag the same way:
@@ -359,7 +358,9 @@ def revisions():
 def record_release(rid, done):
     """Add (or replace) this release in books/revisions.json; its text."""
     data = revisions()
-    books = {s["slug"]: version_key(s["tag"]["tag"])[0] for s in done}
+    # a whole version as a number (Lulu's revision), a point version as "13.1"
+    books = {s["slug"]: (lambda v: v[0] if len(v) == 1 else ".".join(map(str, v)))(
+        version_key(s["tag"]["tag"])) for s in done}
     data["releases"] = [r for r in data["releases"] if r["release"] != rid] + \
         [{"release": rid, "books": books}]
     text = json.dumps(data, indent=2, ensure_ascii=False) + "\n"
@@ -373,11 +374,12 @@ def last_version(d):
     sign-off tags, which a tag from a withdrawn release can lag behind)."""
     tags = book_tags(d)
     tagged = version_key(tags[0])[0] if tags else 0
-    return max([tagged] + [r["books"].get(slug(d), 0) for r in revisions()["releases"]])
+    return max([tagged] + [int(str(r["books"].get(slug(d), 0)).split(".")[0])
+                           for r in revisions()["releases"]])
 
 
 def is_point(version):
-    """v13.1: an ebook-only version (the print is v13's)."""
+    """v13.1: a point version, between Lulu revisions 13 and 14."""
     return "." in version.lstrip("v")
 
 
@@ -387,10 +389,10 @@ def print_version(version):
 
 
 def next_point(d):
-    """The next ebook-only version: vN.(M+1) after the newest sign-off vN(.M)."""
+    """The next point version: vN.(M+1) after the newest sign-off vN(.M)."""
     tags = book_tags(d)
     if not tags:
-        sys.exit(f"{slug(d)} has no sign-off: an ebook-only version follows one")
+        sys.exit(f"{slug(d)} has no sign-off: a point version follows one")
     n = version_key(tags[0])
     if n[0] < last_version(d):
         sys.exit(f"{slug(d)}: revision {last_version(d)} (books/revisions.json) is "
@@ -428,7 +430,7 @@ def page_images(pdf, outdir):
 def print_differences(old, new, tmp):
     """How the print PDFs and covers built now differ from those built at a
     sign-off ([] when the same page for page): file by file, the page count
-    and each page's rendering."""
+    and each page's rendering. Said in a point version's sign-off."""
     old = {f.name: f for f in old if f.suffix == ".pdf"}
     new = {f.name: f for f in new if f.suffix == ".pdf"}
     bad = [f"{n}: only at the sign-off" for n in sorted(old.keys() - new.keys())]
@@ -449,13 +451,13 @@ def print_differences(old, new, tmp):
 def cmd_sign(a):
     d = fgb.find_book(a.book)
     s = state(d)
-    if a.ebook and a.version:
-        sys.exit("give a version or --ebook, not both")
-    n = next_point(d) if a.ebook else a.version or str(last_version(d) + 1)
-    ebook_only = is_point(n)
-    if ebook_only and n.lstrip("v").split(".")[0] != str(version_key(s["tag"]["tag"])[0]
-                                                        if s.get("tag") else ""):
-        sys.exit(f"an ebook-only version keeps the print of the last sign-off "
+    if a.point and a.version:
+        sys.exit("give a version or --point, not both")
+    n = next_point(d) if a.point else a.version or str(last_version(d) + 1)
+    point = is_point(n)
+    if point and n.lstrip("v").split(".")[0] != str(version_key(s["tag"]["tag"])[0]
+                                                   if s.get("tag") else ""):
+        sys.exit(f"a point version follows the last sign-off "
                  f"({s['tag']['tag'] if s.get('tag') else 'none'}): {n} does not")
     tag = f"{slug(d)}/v{n.lstrip('v')}"
     if git("rev-parse", "-q", "--verify", f"refs/tags/{tag}", check=False).returncode == 0:
@@ -466,17 +468,23 @@ def cmd_sign(a):
     with tempfile.TemporaryDirectory(prefix="fgb-release-") as tmp:
         (Path(tmp) / "now").mkdir()
         files, res = run_gates(s, Path(tmp) / "now")
-        if ebook_only and not res["print"]:
-            print(f"  the print at {s['tag']['tag']} ...")
-            then = print_at(s["tag"]["tag"], Path(tmp) / "then")
-            res["same print"] = print_differences(then, files, Path(tmp) / "pages")
-    show_gates(res)
-    if any(res.values()):
-        sys.exit("not signed off: fix what failed above first" +
-                 ("; a print change is a new revision (sign without --ebook)"
-                  if res.get("same print") else ""))
+        show_gates(res)
+        if any(res.values()):
+            sys.exit("not signed off: fix what failed above first")
+        lulu = []
+        if point:
+            last = s["tag"]["tag"]
+            print(f"  the print at {last} ...")
+            then = print_at(last, Path(tmp) / "then")
+            diff = print_differences(then, files, Path(tmp) / "pages")
+            was = print_version(s["tag"]["version"])
+            lulu = [f"Print: the same as {last.rsplit('/', 1)[-1]}, page for page "
+                    f"(Lulu revision {was[1:]})." if not diff else
+                    f"Print: changed since {last.rsplit('/', 1)[-1]} "
+                    f"({'; '.join(diff)}); not a Lulu revision."]
+            print(f"  {lulu[0]}")
     title = fgb.Book(d).cfg.get("EPUB", {}).get("title", d.name)
-    msg = [f"{title}, v{n.lstrip('v')}"] + ([a.note] if a.note else [])
+    msg = [f"{title}, v{n.lstrip('v')}"] + lulu + ([a.note] if a.note else [])
     args = ["tag", "-s", tag] + [x for m in msg for x in ("-m", m)]
     r = subprocess.run(["git", "-C", str(REPO), *args])   # may ask for the key
     if r.returncode:
@@ -599,8 +607,7 @@ def catalog(rid, entries, colophon, trial=False):
           f"Built with colophon {colophon}.", "",
           "| Book | Author | Version | Signed off |", "| --- | --- | --- | --- |"]
     for e in entries:
-        shown = e["version"] + (f" (print {print_version(e['version'])})"
-                                if is_point(e["version"]) else "")
+        shown = e["version"] + (" (between Lulu revisions)" if is_point(e["version"]) else "")
         md.append(f"| [{e['title']}](#{re.sub(r'[^a-z0-9 -]', '', e['title'].lower()).replace(' ', '-')}) | {e['author']} | {shown} "
                   f"| {e['signed_off']['date']} |")
     for e in entries:
@@ -613,8 +620,9 @@ def catalog(rid, entries, colophon, trial=False):
                + ("" if e["signed_off"]["signature_verified"] else " (signature not verified)"),
                f"- template: {e['template']}" if e["template"] else "- template: -"]
         if is_point(e["version"]):
-            md.append(f"- an ebook-only version: the print is "
-                      f"{print_version(e['version'])}'s, page for page")
+            md.append(f"- a point version: an improved edition after Lulu revision "
+                      f"{print_version(e['version'])[1:]} (the sign-off note says whether "
+                      "its print is still that revision's)")
         if e["signed_off"]["note"]:
             md.append(f"- sign-off note: {e['signed_off']['note']}")
         for x in e["sources"]:
@@ -668,9 +676,7 @@ def cmd_make(a):
                 continue
             files = []
             for f in built:
-                # the print keeps its revision; an ebook-only version names the EPUB
-                v = s["tag"]["version"] if f.suffix == ".epub" else print_version(s["tag"]["version"])
-                dest = root / asset_name(d, v, f)
+                dest = root / asset_name(d, s["tag"]["version"], f)
                 shutil.copy2(f, dest)
                 files.append({"name": dest.name, "bytes": dest.stat().st_size,
                               "sha256": sha256(dest)})
