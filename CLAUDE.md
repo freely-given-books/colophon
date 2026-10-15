@@ -105,6 +105,10 @@ overrides), so the ebook and the Typst chapters cannot drift apart.
     "laid even one against another" (the parallel of duties), set as two
     columns item against item: `#[ ... ] <parallel>` in the chapters (the
     template's `parallel`), a paired `table.parallel` in the ebook;
+    `item[@change="#review"]` (no `@rend`) a paragraph printed after a list
+    that the review carries on as its next item ("4. Good will", a brace,
+    after items 1-3: the brace's label is the item's text, its branches a
+    list under it; the orig layer sets it as the paragraph it was);
     `seg[@type="after-list"]` words printed at the end of a list's last
     item that the edition sets after the list as a paragraph;
     `RUN_IN_PLAIN` (editorial.py) run-in heads of these division types set

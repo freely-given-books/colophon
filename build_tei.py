@@ -2333,6 +2333,24 @@ def merge_lists(log):
         while j >= 0 and par.children[j].kind in ("space", "noise"):
             j -= 1
         prev = par.children[j] if j >= 0 else None
+        if prev is not None and prev.kind == "container" and local(prev.el) == "p":
+            # a list ending the paragraph before (printed, or its run-in
+            # "1. ... 3." set out): the new items carry it on (Gouge's "4. Good will", a
+            # brace printed after items 1-3); only the nesting changes
+            inner = [c for c in prev.children if c.kind not in ("space", "noise")]
+            if inner and inner[-1].kind == "container" and local(inner[-1].el) == "list":
+                prev = inner[-1]
+                if prev.el.get("type") == lst.el.get("type"):
+                    while prev.children and prev.children[-1].kind == "space":
+                        prev.children.pop()
+                    for c in lst.children:      # printed as paragraphs (orig layer)
+                        if c.kind == "container" and local(c.el) == "item":
+                            c.el.set("change", "#review")
+                    prev.children += [Tok("space", ["\n"])] + [c for c in lst.children]
+                    relink(prev)
+                    del par.children[j + 1:k + 1]
+                    relink(par)
+                continue
         if prev is not None and prev.kind == "container" and local(prev.el) == "list" \
                 and prev.el.get("change") == "#review" and prev in MADE_LISTS \
                 and prev.el.get("type") == lst.el.get("type"):

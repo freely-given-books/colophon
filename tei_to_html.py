@@ -218,7 +218,26 @@ class HtmlR(R):
             body = etree.Element("item-body")
             body.text = item.text
             subs = []
+            # an item the review carried on into the list before it from the
+            # paragraph after (build_tei.merge_lists): printed as a paragraph
+            carried = item.get("change") == "#review" and not item.get("rend")
             for c in item:
+                if local(c) == "table" and (self.layer == "orig" and carried or
+                                            self.layer == "reg" and
+                                            layout.table_reading(c)[0] == "brace"):
+                    # a brace set as an item: its label the item's text, its
+                    # branches a list under it (orig layer: rows as printed)
+                    if self.layer == "reg":
+                        for marker, cells in layout.table_reading(c)[1]:
+                            if marker != "+":
+                                for cell in cells:
+                                    x = copy.deepcopy(cell)
+                                    x.tail = " "
+                                    body.append(x)
+                    subs.append(c)
+                    if c.tail and len(body):
+                        body[-1].tail = (body[-1].tail or "") + c.tail
+                    continue
                 if local(c) in ("list", "p"):
                     subs.append(c)
                     if c.tail:
@@ -234,11 +253,19 @@ class HtmlR(R):
             def sub_html(s):            # a list or a paragraph inside the item
                 if local(s) == "list":
                     return self.list_html(s, depth + 1)
+                if local(s) == "table" and self.layer == "orig":
+                    return self.table_html(s)
+                if local(s) == "table":     # a brace's branches
+                    ts = [self.text_of(cells) for marker, cells in
+                          layout.table_reading(s)[1] if marker == "+"]
+                    ts = [t for t in ts if t]
+                    return [f"<ol>{''.join(f'<li>{t}</li>' for t in ts)}</ol>"] if ts else []
                 t = self.text(s)
                 return [f"<p>{t}</p>"] if t else []
             if self.layer == "orig" and (numbered and lst.get("subtype") != "printed" or
-                                         lst.get("type") == "bulleted"):
+                                         lst.get("type") == "bulleted" or carried):
                 # printed numerals stay in the text, as run-in paragraphs
+                flush_items()
                 if txt:
                     out.append(f"<p>{txt}</p>")
                 for s in subs:
