@@ -678,9 +678,9 @@ def main():
     p.add_argument("--check", action="store_true",
                    help="status: run every gate on each book too (builds them)")
     p.add_argument("--note", help="sign: a line for the tag message")
-    p.add_argument("--ebook", action="store_true",
-                   help="sign: an ebook-only version (vN.1, vN.2, ...); the print "
-                   "must be the same as at the last sign-off")
+    p.add_argument("--point", action="store_true",
+                   help="sign: a point version (vN.1, vN.2, ...), an improved edition "
+                   "between Lulu revisions")
     p.add_argument("--out", help="make: folder for the release (default: dist/release/)")
     p.add_argument("--trial", action="store_true",
                    help="make: take unverified sign-offs and an unreleased colophon; "
