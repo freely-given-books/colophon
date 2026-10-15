@@ -27,7 +27,9 @@ Options:
   --cover FILE       cover image; gets a cover page and cover-image property
   --css FILE         stylesheet, linked from every page; repeatable, in order
   --toc-depth N      deepest heading in the contents: 3 (default) or 4, for a
-                     book whose sections (h4) should be listed too
+                     book whose sections (h4) should be listed too; keep the
+                     contents to two levels (Apple Books misplaces the entries
+                     after a third)
   --lang CODE        language of the text (default en)
   --identifier ID    dc:identifier (default: a UUID derived from title+author,
                      stable across rebuilds)
@@ -125,7 +127,9 @@ def ncx_doc(title, ident, tree):
             out += (f'<navPoint id="np-{n[0]}" playOrder="{n[0]}"><navLabel><text>{esc(t)}'
                     f'</text></navLabel><content src="{h}"/>{points(kids)}</navPoint>')
         return out
-    depth = 2 if any(k for _, _, k in tree) else 1
+    def deepest(entries):
+        return 1 + max((deepest(k) for _, _, k in entries if k), default=0)
+    depth = deepest(tree)
     doc = ('<?xml version="1.0" encoding="utf-8"?>\n'
            '<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">'
            f'<head><meta name="dtb:uid" content="{esc(ident)}"/>'
@@ -319,6 +323,9 @@ def main():
         extra_page(f, n, "after")
 
     tree = nest(heads)
+    if any(k for _, _, kids in tree for _, _, k in kids):
+        print("warning: the contents go deeper than two levels; Apple Books sets the "
+              "entries after a third level one level too high (lower --toc-depth)")
     files["nav.xhtml"] = nav_doc(a.title, tree, landmarks, a.lang, css_names).encode("utf-8")
     items.append(("nav", "nav.xhtml", "application/xhtml+xml", "nav"))
     files["toc.ncx"] = ncx_doc(a.title, ident, tree).encode("utf-8")
