@@ -100,7 +100,11 @@ overrides), so the ebook and the Typst chapters cannot drift apart.
     bold; `p[@rend="epigraph"]` a paragraph holding a scripture text set
     as an epigraph (the review's centred `#align(center)[ #block ...]`);
     `cell[@rend="nested"]` a brace branch set under the branch before;
-    `table[@rend="inline"]` a brace read into one sentence; blocks the
+    `table[@rend="inline"]` a brace read into one sentence;
+    `table[@rend="parallel"][@n]` (`PARALLEL_TABLES`) two printed tables
+    "laid even one against another" (the parallel of duties), set as two
+    columns item against item: `#[ ... ] <parallel>` in the chapters (the
+    template's `parallel`), a paired `table.parallel` in the ebook; blocks the
     review deletes whole (margin matter moved into a note) stay, emptied,
     and the paragraph runs on past them
 - The header (`editorialDecl`, `respStmt`, `revisionDesc`) documents the

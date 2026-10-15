@@ -69,10 +69,12 @@ class R:
         self.expand = expand
         self.mark = mark_supplied
         self.only_auto = only_auto
+        self.root = None            # the document (index)
 
     def index(self, root):
         """Notes the review moved: note[@target] is shown at its anchor in
         the reg layer and where it was printed in the orig layer."""
+        self.root = root
         for n in root.iter(T + "note"):
             tgt = n.get("target")
             if tgt and tgt.startswith("#"):
@@ -225,7 +227,10 @@ class R:
                 t = self.inline(cell)
                 if not t.strip():
                     continue
-                out += ("" if not out or re.match(r"\s*[,.;:)]", t) else " ") + t
+                if out and re.match(r"\s*(?:#\w+\[|<[^>]+>)*[,.;:)]", t):
+                    out = out.rstrip() + t.lstrip()
+                else:
+                    out += (" " if out else "") + t
             return out
         return self.inline(c, in_numbered)                 # seg, q, bibl, ...
 
@@ -617,7 +622,8 @@ def epigraph_block(ref, body, after=False):
     if ref and not after:
         lines += ref_line + [""]
     if body:
-        lines.append(f'    #text(style: "italic")[{whole_emph(body)}]')
+        # a verse opening with its number ("23. Christ is ...") is not a list
+        lines.append(f'    #text(style: "italic")[{block_start_escape(whole_emph(body))}]')
     if ref and after:
         lines += [""] + ref_line
     return lines + ["  ]", "]", "", "#v(0.8em)", ""]
@@ -651,6 +657,11 @@ def table_lines(r, table):
     lines and its branches as a list (layout.table_reading); in the orig
     layer row by row, as printed."""
     lines = []
+    # a parallel pair (table/@rend="parallel") is one #[ ... ] <parallel>
+    # scope: the template sets the two as columns, item against item
+    place = layout.parallel_place(table) if r.layer == "reg" else None
+    if place == 0:
+        lines += ["#["]
     if r.layer == "reg":
         _mode, blocks = layout.table_reading(table)
         for marker, cells in blocks:
@@ -671,6 +682,10 @@ def table_lines(r, table):
                 lines += [block_start_escape(t), ""]
     if lines and lines[-1] != "":
         lines.append("")
+    if place == 1:
+        while lines and lines[-1] == "":
+            lines.pop()
+        lines += ["] <parallel>", ""]
     return lines
 
 

@@ -113,6 +113,11 @@ OPENING_SMALLCAPS = False
 # printed as a tree): list/@rend="diagram", set whole like an illustration.
 DIAGRAM_LISTS = None
 
+# A function of the TEI root giving pairs of tables printed "laid even one
+# against another" (Gouge's parallel of husbands' and wives' duties):
+# table/@rend="parallel" on both, set as two columns, item n against item n.
+PARALLEL_TABLES = None
+
 # The early-modern machine pass (spelling engine, sentence case, common-noun
 # lowercasing). A book from a modern source (CCEL) turns it off: its words
 # stay as given, and only TYPOGRAPHY and the review change them.
@@ -143,7 +148,7 @@ def load_tables(path):
                  "MODERNIZE_NOTES", "LATIN_RUNS", "DROP_FOREIGN_GAPS", "GAP_NOTES",
                  "EXPAND_ETC", "ITALIC_SENTENCE_QUIRK", "DROP_CAP_CASE",
                  "MODERNIZE", "TYPOGRAPHY", "DASH", "AUTHOR", "QUOTE_START_CASE",
-                 "OPENING_SMALLCAPS", "DIAGRAM_LISTS"):
+                 "OPENING_SMALLCAPS", "DIAGRAM_LISTS", "PARALLEL_TABLES"):
         if name in ns:
             g[name] = ns[name]
     # the book's own spellings, over the shared table (e.g. Gouge keeps
@@ -1701,6 +1706,12 @@ def apply_spacing(root_tok, order, sp, log, label, skip_notes=True, owner=None):
         ia, ib = pos[id(a)], pos[id(b)]
         if ia >= ib:
             continue
+        # a table read into its sentence goes column by column, not in
+        # document order: the space between two of its cells is the
+        # extractor's join, not the source's whitespace (inline_cell)
+        ca, cb = inline_cell(a), inline_cell(b)
+        if (ca is not None or cb is not None) and ca is not cb:
+            continue
         between = leaves[ia + 1:ib]
         # indentation between two words' elements renders as a space too
         spaces = [x for x in between if x.kind == "space" or
@@ -1738,6 +1749,17 @@ def apply_spacing(root_tok, order, sp, log, label, skip_notes=True, owner=None):
                 x.kind = "spacing"
                 x.reg, x.resp = "", "#editor"
             log.append((label, "spacing", "space", "(none)"))
+
+
+def inline_cell(t):
+    """The table cell that holds token t, or None. (Whether the review reads
+    its table into the sentence is not yet marked when spacing is applied;
+    a table set as lines or a list puts its cells in blocks of their own.)"""
+    while t is not None:
+        if t.kind == "container" and local(t.el) == "cell":
+            return t.el
+        t = t.parent
+    return None
 
 
 def pad(t, lead="", trail=""):
@@ -2282,6 +2304,8 @@ def wrap_label(labels):
     par = labels[0].parent
     if par is None or labels[1].parent is not par:
         return False
+    if par.kind == "container" and local(par.el) == "label":
+        return True                 # printed in a <label> already
     kids = par.children
     i0 = next(k for k, c in enumerate(kids) if c is labels[0])
     i1 = next(k for k, c in enumerate(kids) if c is labels[1])
@@ -3096,6 +3120,9 @@ def add_header(root, editor_name):
         (".//t:list[@rend='diagram']", "list[@rend='diagram']: a diagram printed "
          "as a list (a genealogy set as a tree), which this edition sets whole, "
          "like an illustration, never across two pages."),
+        (".//t:table[@rend='parallel']", "table[@rend='parallel']: two tables "
+         "printed one against the other (@n 1 and 2, in document order), "
+         "which this edition sets as two columns, item against item."),
         (".//t:seg[@type='opening']", "seg[@rend='smallcaps'][@type='opening']: the "
          "first word of a division, printed in capitals after a drop cap, which this "
          "edition sets in small capitals."),
@@ -3441,6 +3468,12 @@ def mark_diagrams(root):
     if DIAGRAM_LISTS:
         for lst in DIAGRAM_LISTS(root):
             lst.set("rend", "diagram")
+    if PARALLEL_TABLES:
+        for pair in PARALLEL_TABLES(root):
+            assert len(pair) == 2, "PARALLEL_TABLES gives pairs of tables"
+            for k, tb in enumerate(pair):
+                tb.set("rend", "parallel")
+                tb.set("n", str(k + 1))
 
 
 def write_report(path, log, unresolved):

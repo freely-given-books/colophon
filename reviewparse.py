@@ -206,9 +206,10 @@ ENUM_RE = re.compile(r"^\s*#set enum\((.*)\)\s*$")
 
 
 def unwrap_lists(text):
-    """A "#[" line opens a scope that its own "]" line closes (the review's
-    way of numbering one list differently: #[ #set enum(numbering: "a)",
-    start: 2) + ... ]). The two lines are layout and become "//@scope" and
+    """A "#[" line opens a scope that its own "]" line (or "] <label>", a
+    label the template shows) closes (the review's way of numbering one
+    list differently: #[ #set enum(numbering: "a)", start: 2) + ... ]).
+    The two lines are layout and become "//@scope" and
     "//@scope-end" lines for parse_review, and a #set enum inside such a
     scope a "//@enum numbering|start" line."""
     out, opens, depth = [], [], 0
@@ -219,7 +220,8 @@ def unwrap_lists(text):
             depth += 1
             out += ["", "//@scope"]
             continue
-        if st == "]" and opens and depth - 1 == opens[-1]:
+        # a scope may carry a label the template shows (] <parallel>)
+        if re.fullmatch(r"\](\s*<[\w-]+>)?", st) and opens and depth - 1 == opens[-1]:
             opens.pop()
             depth -= 1
             out.append("//@scope-end")
