@@ -18,6 +18,12 @@ rewrites the TEI) holds the book back until the editor signs it off again.
                                  tag <author>/<book>/vN (the editor's step;
                                  N: one past the last version,
                                  tags or books/revisions.json)
+  ./fgb release sign BOOK --ebook
+                                 an ebook-only version, vN.1, vN.2, ...: the
+                                 print PDFs and covers must be the same as at
+                                 the last sign-off, page for page as
+                                 rendered, so the print stays Lulu's
+                                 revision N
   ./fgb release make             a release of every done book: the gates,
                                  then dist/release/<date>/ (PDFs, EPUBs,
                                  covers, CATALOG.md, catalog.json,
@@ -37,6 +43,10 @@ The gates, every one of which a done book must pass:
   report    review-report.md has no edit left unapplied or unresolved
   print     the print PDFs build with nothing against Lulu's rules
   epub      the EPUB builds and passes epubcheck
+
+Versions: a whole number vN is a print revision and matches Lulu's revision N
+(books/revisions.json keeps the whole numbers). A point version vN.M changes
+only the ebook: its print files are released under vN, its EPUB under vN.M.
 
 Signatures are checked against `allowed_signers` at the books repository's
 root (ssh-keygen's format), so anyone can check a tag the same way:
@@ -366,10 +376,87 @@ def last_version(d):
     return max([tagged] + [r["books"].get(slug(d), 0) for r in revisions()["releases"]])
 
 
+def is_point(version):
+    """v13.1: an ebook-only version (the print is v13's)."""
+    return "." in version.lstrip("v")
+
+
+def print_version(version):
+    """The print revision of a version: v13.1 -> v13."""
+    return "v" + version.lstrip("v").split(".")[0]
+
+
+def next_point(d):
+    """The next ebook-only version: vN.(M+1) after the newest sign-off vN(.M)."""
+    tags = book_tags(d)
+    if not tags:
+        sys.exit(f"{slug(d)} has no sign-off: an ebook-only version follows one")
+    n = version_key(tags[0])
+    if n[0] < last_version(d):
+        sys.exit(f"{slug(d)}: revision {last_version(d)} (books/revisions.json) is "
+                 f"newer than its last sign-off, {tags[0]}; sign off a print revision")
+    return f"{n[0]}.{(n[1] if len(n) > 1 else 0) + 1}"
+
+
+def print_at(tag, outdir):
+    """Build the book's print PDFs and covers as they were at a sign-off
+    (a checkout of the tag; the templates it imports from the cache)."""
+    book = Path("books") / tag.rsplit("/v", 1)[0]
+    outdir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="fgb-signed-") as tmp:
+        wt = Path(tmp) / "repo"
+        git("worktree", "add", "-q", "--detach", str(wt), tag)
+        try:
+            typ = git("-C", str(wt), "grep", "-h", "-o", "-E", packages.IMPORT_RE,
+                      "--", "books/*.typ", check=False).stdout
+            for m in sorted(set(typ.split())):
+                packages.ensure(*m[len("@local/"):].split(":"))
+            bk = fgb.Book(wt / book)
+            return fgb.build_pdf(bk, outdir, covers=True, root=wt)
+        finally:
+            git("worktree", "remove", "--force", str(wt), check=False)
+
+
+def page_images(pdf, outdir):
+    """Each page of a PDF as rendered (72 ppi, grey), in page order."""
+    outdir.mkdir(parents=True)
+    subprocess.run(["pdftoppm", "-r", "72", "-gray", str(pdf), str(outdir / "p")],
+                   check=True)
+    return sorted(outdir.iterdir(), key=lambda p: int(re.findall(r"\d+", p.stem)[-1]))
+
+
+def print_differences(old, new, tmp):
+    """How the print PDFs and covers built now differ from those built at a
+    sign-off ([] when the same page for page): file by file, the page count
+    and each page's rendering."""
+    old = {f.name: f for f in old if f.suffix == ".pdf"}
+    new = {f.name: f for f in new if f.suffix == ".pdf"}
+    bad = [f"{n}: only at the sign-off" for n in sorted(old.keys() - new.keys())]
+    bad += [f"{n}: new since the sign-off" for n in sorted(new.keys() - old.keys())]
+    for n in sorted(old.keys() & new.keys()):
+        a = page_images(old[n], tmp / "old" / n)
+        b = page_images(new[n], tmp / "new" / n)
+        if len(a) != len(b):
+            bad.append(f"{n}: {len(a)} pages at the sign-off, {len(b)} now")
+            continue
+        pages = [i + 1 for i, (x, y) in enumerate(zip(a, b)) if sha256(x) != sha256(y)]
+        if pages:
+            bad.append(f"{n}: {len(pages)} page(s) differ: "
+                       + ", ".join(map(str, pages[:12])) + (" ..." if len(pages) > 12 else ""))
+    return bad
+
+
 def cmd_sign(a):
     d = fgb.find_book(a.book)
     s = state(d)
-    n = a.version or str(last_version(d) + 1)
+    if a.ebook and a.version:
+        sys.exit("give a version or --ebook, not both")
+    n = next_point(d) if a.ebook else a.version or str(last_version(d) + 1)
+    ebook_only = is_point(n)
+    if ebook_only and n.lstrip("v").split(".")[0] != str(version_key(s["tag"]["tag"])[0]
+                                                        if s.get("tag") else ""):
+        sys.exit(f"an ebook-only version keeps the print of the last sign-off "
+                 f"({s['tag']['tag'] if s.get('tag') else 'none'}): {n} does not")
     tag = f"{slug(d)}/v{n.lstrip('v')}"
     if git("rev-parse", "-q", "--verify", f"refs/tags/{tag}", check=False).returncode == 0:
         sys.exit(f"{tag} exists already")
@@ -377,10 +464,17 @@ def cmd_sign(a):
         sys.exit(f"{slug(d)} is unchanged since {s['tag']['tag']}: nothing new to sign off")
     print(f"{slug(d)}: the gates before signing off {tag}")
     with tempfile.TemporaryDirectory(prefix="fgb-release-") as tmp:
-        _files, res = run_gates(s, Path(tmp))
+        (Path(tmp) / "now").mkdir()
+        files, res = run_gates(s, Path(tmp) / "now")
+        if ebook_only and not res["print"]:
+            print(f"  the print at {s['tag']['tag']} ...")
+            then = print_at(s["tag"]["tag"], Path(tmp) / "then")
+            res["same print"] = print_differences(then, files, Path(tmp) / "pages")
     show_gates(res)
     if any(res.values()):
-        sys.exit("not signed off: fix what failed above first")
+        sys.exit("not signed off: fix what failed above first" +
+                 ("; a print change is a new revision (sign without --ebook)"
+                  if res.get("same print") else ""))
     title = fgb.Book(d).cfg.get("EPUB", {}).get("title", d.name)
     msg = [f"{title}, v{n.lstrip('v')}"] + ([a.note] if a.note else [])
     args = ["tag", "-s", tag] + [x for m in msg for x in ("-m", m)]
@@ -505,7 +599,9 @@ def catalog(rid, entries, colophon, trial=False):
           f"Built with colophon {colophon}.", "",
           "| Book | Author | Version | Signed off |", "| --- | --- | --- | --- |"]
     for e in entries:
-        md.append(f"| [{e['title']}](#{re.sub(r'[^a-z0-9 -]', '', e['title'].lower()).replace(' ', '-')}) | {e['author']} | {e['version']} "
+        shown = e["version"] + (f" (print {print_version(e['version'])})"
+                                if is_point(e["version"]) else "")
+        md.append(f"| [{e['title']}](#{re.sub(r'[^a-z0-9 -]', '', e['title'].lower()).replace(' ', '-')}) | {e['author']} | {shown} "
                   f"| {e['signed_off']['date']} |")
     for e in entries:
         md += ["", f"## {e['title']}"]
@@ -516,6 +612,9 @@ def catalog(rid, entries, colophon, trial=False):
                f"signed off {e['signed_off']['date']} by {e['signed_off']['signer']}"
                + ("" if e["signed_off"]["signature_verified"] else " (signature not verified)"),
                f"- template: {e['template']}" if e["template"] else "- template: -"]
+        if is_point(e["version"]):
+            md.append(f"- an ebook-only version: the print is "
+                      f"{print_version(e['version'])}'s, page for page")
         if e["signed_off"]["note"]:
             md.append(f"- sign-off note: {e['signed_off']['note']}")
         for x in e["sources"]:
@@ -569,7 +668,9 @@ def cmd_make(a):
                 continue
             files = []
             for f in built:
-                dest = root / asset_name(d, s["tag"]["version"], f)
+                # the print keeps its revision; an ebook-only version names the EPUB
+                v = s["tag"]["version"] if f.suffix == ".epub" else print_version(s["tag"]["version"])
+                dest = root / asset_name(d, v, f)
                 shutil.copy2(f, dest)
                 files.append({"name": dest.name, "bytes": dest.stat().st_size,
                               "sha256": sha256(dest)})
