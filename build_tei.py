@@ -2661,6 +2661,27 @@ def restructure(splits, log):
             relink(par)
             log.append((s[4], "split", "signature", f"new line at '{s[0].orig}'"))
             continue
+        item = next((a for a in ancestors(s[0]) if local(a.el) == "item"), None)
+        lst = item.parent if item is not None else None
+        if s[1] == "¶" and b is not None and local(b.el) == "p" and lst is not None and \
+                lst.parent is b and local(lst.el) == "list" and \
+                [c for c in lst.children if c.kind == "container"][-1] is item:
+            # the last item of a printed list runs on into the sentence after
+            # the list ("... with the like. These therefore ought he ..."):
+            # the edition sets that sentence after the list, as a paragraph.
+            # Its words move out of the item to just after the list, so the
+            # printed order is kept.
+            _left, right = split_container(item, s[0])
+            seg = new_container("seg")
+            seg.el.set("type", "after-list")
+            seg.el.set("change", "#review")
+            seg.children = right.children
+            relink(seg)
+            k = next(i for i, c in enumerate(b.children) if c is lst)
+            b.children[k + 1:k + 1] = [seg]
+            relink(b)
+            log.append((s[4], "split", "list", f"its last item runs on; set after it at '{s[0].orig}'"))
+            continue
         if b is None or local(b.el) != "p":
             log.append((s[4], "skipped", f"new {s[1]} before '{s[0].orig}'",
                         "not a paragraph (e.g. a list heading); kept as is"))
@@ -3120,6 +3141,9 @@ def add_header(root, editor_name):
         (".//t:list[@rend='diagram']", "list[@rend='diagram']: a diagram printed "
          "as a list (a genealogy set as a tree), which this edition sets whole, "
          "like an illustration, never across two pages."),
+        (".//t:seg[@type='after-list']", "seg[@type='after-list']: words printed at the "
+         "end of a list's last item that this edition sets after the list, as a "
+         "paragraph (the printed order is kept)."),
         (".//t:table[@rend='parallel']", "table[@rend='parallel']: two tables "
          "printed one against the other (@n 1 and 2, in document order), "
          "which this edition sets as two columns, item against item."),

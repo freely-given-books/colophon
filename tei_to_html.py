@@ -60,6 +60,9 @@ SCRIPT_RUNS = [
      '<span lang="he" dir="rtl">{}</span>'),
 ]
 NOTEREF_GAP = re.compile(r'\s+(<a class="noteref")')
+# two note references that touch are kept apart by a superscript comma, as
+# the print template does (fgbooks 0.11.0)
+NOTEREF_PAIR = re.compile(r'(role="doc-noteref"><sup>\d+</sup></a>)(<a class="noteref")')
 
 
 def curl(markup):
@@ -176,7 +179,8 @@ class HtmlR(R):
     def text(self, el):
         """Inline XHTML of el; quotes stay straight until the block it goes
         into is finished (finish()), since a run-on block joins another."""
-        return NOTEREF_GAP.sub(r"\1", collapse(self.inline(el)).strip())
+        return NOTEREF_PAIR.sub(r"\1<sup>,</sup>\2",
+                                NOTEREF_GAP.sub(r"\1", collapse(self.inline(el)).strip()))
 
     def signature(self, out, c, t, first):
         """A signature line: in the edition set right, the first of a closer
