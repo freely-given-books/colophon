@@ -307,3 +307,29 @@ def table_reading(table):
             continue
         out.append(("¶" if len(cells) == 1 else "+", cells))
     return "rows", out
+
+
+def parallel_place(table):
+    """A table of a parallel pair (table/@rend="parallel", PARALLEL_TABLES):
+    0 for the first of its pair, 1 for the second (its @n), None for any
+    other table."""
+    if table.get("rend") != "parallel":
+        return None
+    return int(table.get("n")) - 1
+
+
+def parallel_partner(table, root):
+    """The other table of table's parallel pair in the document root (table
+    may be a copy, as a paragraph's blocks are), or None."""
+    if root is None:
+        return None
+    tables = [t for t in root.iter(T + "table") if t.get("rend") == "parallel"]
+    me = etree.tostring(table, with_tail=False)
+    k = next((i for i, t in enumerate(tables)
+              if etree.tostring(t, with_tail=False) == me), None)
+    if k is None:
+        return None
+    j = k + 1 if table.get("n") == "1" else k - 1
+    if 0 <= j < len(tables) and tables[j].get("n") != table.get("n"):
+        return tables[j]
+    return None

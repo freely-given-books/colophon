@@ -343,6 +343,12 @@ class HtmlR(R):
     def table_html(self, table):
         """As tei_extract.table_lines: labels as paragraphs, branches as a
         list (reg layer); rows as printed (orig layer)."""
+        place = layout.parallel_place(table) if self.layer == "reg" else None
+        partner = layout.parallel_partner(table, self.root) if place is not None else None
+        if partner is not None and place == 1:
+            return []                     # set with the first of its pair
+        if partner is not None:
+            return self.parallel_html(table, partner)
         out, items = [], []
 
         def flush():
@@ -370,6 +376,26 @@ class HtmlR(R):
                     out.append(f"<p>{t}</p>")
         flush()
         return out
+
+    def parallel_html(self, a, b):
+        """A parallel pair (table/@rend="parallel") as one table: the two
+        heads side by side, then item n against item n."""
+        halves = []
+        for table in (a, b):
+            heads, items = [], []
+            for marker, cells in layout.table_reading(table)[1]:
+                t = self.text_of(cells)
+                if t:
+                    (items if marker == "+" else heads).append(t)
+            halves.append((heads, items))
+        (ha, ia), (hb, ib) = halves
+        rows = ['<tr class="head">' + "".join(
+            "<td>" + "".join(f"<p>{x}</p>" for x in h) + "</td>" for h in (ha, hb)) + "</tr>"]
+        for k in range(max(len(ia), len(ib))):
+            rows.append("<tr>" + "".join(
+                f'<td><span class="num">{k + 1}.</span> {xs[k]}</td>' if k < len(xs)
+                else "<td></td>" for xs in (ia, ib)) + "</tr>")
+        return ['<table class="parallel">' + "".join(rows) + "</table>"]
 
     def text_of(self, els):
         return NOTEREF_GAP.sub(r"\1", collapse(
