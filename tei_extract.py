@@ -853,8 +853,14 @@ def add_block(r, lines, c, t):
         sp = "" if c.get("rend") == "run-on" else " "
         while len(lines) >= 3 and lines[-2] == "":
             lines.pop()             # blank lines of blocks the review emptied
-        if lines[-2].startswith(("#quote[", "#align(center)[")) and lines[-2].endswith("]"):
-            lines[-2] = lines[-2][:-1] + sp + t + "]"    # runs on inside the block
+        wrap = next((w for w in ("#quote[", "#align(center)[", "#block(inset: (x: 1em))[")
+                     if lines[-2].startswith(w) and lines[-2].endswith("]")), None)
+        if wrap:
+            # runs on inside the block (a set-off block's own wrapper dropped:
+            # Calvin's chapter summaries, one item run on into the one before)
+            if t.startswith(wrap) and t.endswith("]"):
+                t = t[len(wrap):-1]
+            lines[-2] = lines[-2][:-1] + sp + t + "]"
         else:
             lines[-2] += sp + t
     else:
