@@ -229,7 +229,7 @@ class HtmlR(R):
                     # branches a list under it (orig layer: rows as printed)
                     if self.layer == "reg":
                         for marker, cells in layout.table_reading(c)[1]:
-                            if marker != "+":
+                            if marker == "¶":
                                 for cell in cells:
                                     x = copy.deepcopy(cell)
                                     x.tail = " "
@@ -256,10 +256,13 @@ class HtmlR(R):
                 if local(s) == "table" and self.layer == "orig":
                     return self.table_html(s)
                 if local(s) == "table":     # a brace's branches
-                    ts = [self.text_of(cells) for marker, cells in
-                          layout.table_reading(s)[1] if marker == "+"]
-                    ts = [t for t in ts if t]
-                    return [f"<ol>{''.join(f'<li>{t}</li>' for t in ts)}</ol>"] if ts else []
+                    bs = [(m, self.text_of(cells)) for m, cells in
+                          layout.table_reading(s)[1] if m in ("+", "-")]
+                    bs = [(m, t) for m, t in bs if t]
+                    if not bs:
+                        return []
+                    tag = "ol" if bs[0][0] == "+" else 'ul class="plain"'
+                    return [f"<{tag}>{''.join(f'<li>{t}</li>' for _m, t in bs)}</{tag[:2]}>"]
                 t = self.text(s)
                 return [f"<p>{t}</p>"] if t else []
             if self.layer == "orig" and (numbered and lst.get("subtype") != "printed" or
@@ -381,21 +384,27 @@ class HtmlR(R):
         if partner is not None:
             return self.parallel_html(table, partner)
         out, items = [], []
+        tag = ["ol"]
 
         def flush():
             if items:
-                out.append('<ol class="brace">' + "".join(
-                    f"<li>{t}" + (f"<ol>{''.join(f'<li>{x}</li>' for x in sub)}</ol>"
-                                  if sub else "") + "</li>" for t, sub in items) + "</ol>")
+                # "-": branches the print does not number, a plain list
+                op, sub_op = (('<ol class="brace">', "<ol>") if tag[0] == "ol" else
+                              ('<ul class="brace plain">', '<ul class="plain">'))
+                out.append(op + "".join(
+                    f"<li>{t}" + (f"{sub_op}{''.join(f'<li>{x}</li>' for x in sub)}</{tag[0]}>"
+                                  if sub else "") + "</li>" for t, sub in items) + f"</{tag[0]}>")
                 items.clear()
         if self.layer == "reg":
             for marker, cells in layout.table_reading(table)[1]:
                 t = self.text_of(cells)
                 if not t:
                     continue
-                if marker == "+" and cells[0].get("rend") == "nested" and items:
+                if marker in ("+", "-"):
+                    tag[0] = "ol" if marker == "+" else "ul"
+                if marker in ("+", "-") and cells[0].get("rend") == "nested" and items:
                     items[-1][1].append(t)        # under the branch before
-                elif marker == "+":
+                elif marker in ("+", "-"):
                     items.append((t, []))
                 else:
                     flush()
@@ -417,7 +426,7 @@ class HtmlR(R):
             for marker, cells in layout.table_reading(table)[1]:
                 t = self.text_of(cells)
                 if t:
-                    (items if marker == "+" else heads).append(t)
+                    (items if marker in ("+", "-") else heads).append(t)
             halves.append((heads, items))
         (ha, ia), (hb, ib) = halves
         rows = ['<tr class="head">' + "".join(

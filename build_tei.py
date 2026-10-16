@@ -2460,7 +2460,7 @@ def apply_list_shape(log):
             k = next((i for i in range(len(conts) - 1, 0, -1)
                       if local(conts[i].el) == "item"), None)
             cell = next((c for c in reversed(conts) if local(c.el) == "cell"), None)
-            if k is None and cell is not None and d == 1 and info["kind"] == "+" and \
+            if k is None and cell is not None and d == 1 and info["kind"] in ("+", "-") and \
                     not info.get("numbering") and not info.get("start"):
                 # a branch of a brace the review sets under the branch before
                 if cell.el.get("rend") != "nested":

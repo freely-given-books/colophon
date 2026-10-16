@@ -311,7 +311,7 @@ class R:
                     # which are comprised—"): its label is the item's text,
                     # its branches a list under it
                     for marker, cells in layout.table_reading(c)[1]:
-                        if marker != "+":
+                        if marker == "¶":
                             for cell in cells:
                                 x = copy.deepcopy(cell)
                                 x.tail = " "
@@ -334,6 +334,8 @@ class R:
             txt = collapse("".join(text_parts)).strip()
             if txt:
                 if self.layer == "reg" and item.get("rend") == "paragraph":
+                    if lines and lines[-1] != "":
+                        lines.append("")       # not a run-on of the list before
                     lines += [block_start_escape(txt), ""]     # set as a paragraph
                 elif numbered and self.layer == "reg":
                     lines.append("  " * depth + "+ " + txt)
@@ -355,8 +357,8 @@ class R:
                 if local(s) == "table":            # a brace's branches
                     for marker, cells in layout.table_reading(s)[1]:
                         t = collapse(" ".join(self.inline(c) for c in cells)).strip()
-                        if marker == "+" and t:
-                            lines.append("  " * (depth + 1) + "+ " + t)
+                        if marker in ("+", "-") and t:
+                            lines.append("  " * (depth + 1) + marker + " " + t)
                     continue
                 t = self.para(s)
                 if not t:
@@ -698,9 +700,9 @@ def table_lines(r, table):
             t = collapse(" ".join(r.inline(c) for c in cells)).strip()
             if not t:
                 continue
-            if marker == "+":
+            if marker in ("+", "-"):         # "-": branches printed unnumbered
                 nested = cells[0].get("rend") == "nested"
-                lines.append(("  + " if nested else "+ ") + t)
+                lines.append(("  " if nested else "") + marker + " " + t)
             else:
                 if lines and lines[-1] != "":
                     lines.append("")

@@ -193,7 +193,9 @@ def heading_ids(body, prefix, depth=3):
 
     def add(m):
         hid = m.group(3) or f"{prefix}-h{len(heads) + 1}"
-        text = html.unescape(re.sub(r"<[^>]+>", "", m.group(4))).strip()
+        # a heading's footnote (Gouge's "Treat. 4. §. 4.") is not in the contents
+        bare = re.sub(r'<a class="noteref"[^>]*>.*?</a>', "", m.group(4), flags=re.S)
+        text = html.unescape(re.sub(r"<[^>]+>", "", bare)).strip()
         heads.append((hid, int(m.group(1)), text))
         attrs = m.group(2) if m.group(3) else f'{m.group(2)} id="{hid}"'
         return f"<h{m.group(1)}{attrs}>{m.group(4)}</h{m.group(1)}>"

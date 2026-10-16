@@ -109,6 +109,9 @@ overrides), so the ebook and the Typst chapters cannot drift apart.
     that the review carries on as its next item ("4. Good will", a brace,
     after items 1-3: the brace's label is the item's text, its branches a
     list under it; the orig layer sets it as the paragraph it was);
+    a brace's branches the print does not number (Gouge's "Obey / Serve")
+    read as "-" items, a plain list (`layout.printed_number`; the book sets
+    its own marker), numbered ones as "+";
     `seg[@type="after-list"]` words printed at the end of a list's last
     item that the edition sets after the list as a paragraph;
     `RUN_IN_PLAIN` (editorial.py) run-in heads of these division types set
