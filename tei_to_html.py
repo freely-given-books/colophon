@@ -218,7 +218,26 @@ class HtmlR(R):
             body = etree.Element("item-body")
             body.text = item.text
             subs = []
+            # an item the review carried on into the list before it from the
+            # paragraph after (build_tei.merge_lists): printed as a paragraph
+            carried = item.get("change") == "#review" and not item.get("rend")
             for c in item:
+                if local(c) == "table" and (self.layer == "orig" and carried or
+                                            self.layer == "reg" and
+                                            layout.table_reading(c)[0] == "brace"):
+                    # a brace set as an item: its label the item's text, its
+                    # branches a list under it (orig layer: rows as printed)
+                    if self.layer == "reg":
+                        for marker, cells in layout.table_reading(c)[1]:
+                            if marker == "¶":
+                                for cell in cells:
+                                    x = copy.deepcopy(cell)
+                                    x.tail = " "
+                                    body.append(x)
+                    subs.append(c)
+                    if c.tail and len(body):
+                        body[-1].tail = (body[-1].tail or "") + c.tail
+                    continue
                 if local(c) in ("list", "p"):
                     subs.append(c)
                     if c.tail:
@@ -234,11 +253,22 @@ class HtmlR(R):
             def sub_html(s):            # a list or a paragraph inside the item
                 if local(s) == "list":
                     return self.list_html(s, depth + 1)
+                if local(s) == "table" and self.layer == "orig":
+                    return self.table_html(s)
+                if local(s) == "table":     # a brace's branches
+                    bs = [(m, self.text_of(cells)) for m, cells in
+                          layout.table_reading(s)[1] if m in ("+", "-")]
+                    bs = [(m, t) for m, t in bs if t]
+                    if not bs:
+                        return []
+                    tag = "ol" if bs[0][0] == "+" else 'ul class="plain"'
+                    return [f"<{tag}>{''.join(f'<li>{t}</li>' for _m, t in bs)}</{tag[:2]}>"]
                 t = self.text(s)
                 return [f"<p>{t}</p>"] if t else []
             if self.layer == "orig" and (numbered and lst.get("subtype") != "printed" or
-                                         lst.get("type") == "bulleted"):
+                                         lst.get("type") == "bulleted" or carried):
                 # printed numerals stay in the text, as run-in paragraphs
+                flush_items()
                 if txt:
                     out.append(f"<p>{txt}</p>")
                 for s in subs:
@@ -354,21 +384,27 @@ class HtmlR(R):
         if partner is not None:
             return self.parallel_html(table, partner)
         out, items = [], []
+        tag = ["ol"]
 
         def flush():
             if items:
-                out.append('<ol class="brace">' + "".join(
-                    f"<li>{t}" + (f"<ol>{''.join(f'<li>{x}</li>' for x in sub)}</ol>"
-                                  if sub else "") + "</li>" for t, sub in items) + "</ol>")
+                # "-": branches the print does not number, a plain list
+                op, sub_op = (('<ol class="brace">', "<ol>") if tag[0] == "ol" else
+                              ('<ul class="brace plain">', '<ul class="plain">'))
+                out.append(op + "".join(
+                    f"<li>{t}" + (f"{sub_op}{''.join(f'<li>{x}</li>' for x in sub)}</{tag[0]}>"
+                                  if sub else "") + "</li>" for t, sub in items) + f"</{tag[0]}>")
                 items.clear()
         if self.layer == "reg":
             for marker, cells in layout.table_reading(table)[1]:
                 t = self.text_of(cells)
                 if not t:
                     continue
-                if marker == "+" and cells[0].get("rend") == "nested" and items:
+                if marker in ("+", "-"):
+                    tag[0] = "ol" if marker == "+" else "ul"
+                if marker in ("+", "-") and cells[0].get("rend") == "nested" and items:
                     items[-1][1].append(t)        # under the branch before
-                elif marker == "+":
+                elif marker in ("+", "-"):
                     items.append((t, []))
                 else:
                     flush()
@@ -390,7 +426,7 @@ class HtmlR(R):
             for marker, cells in layout.table_reading(table)[1]:
                 t = self.text_of(cells)
                 if t:
-                    (items if marker == "+" else heads).append(t)
+                    (items if marker in ("+", "-") else heads).append(t)
             halves.append((heads, items))
         (ha, ia), (hb, ib) = halves
         rows = ['<tr class="head">' + "".join(

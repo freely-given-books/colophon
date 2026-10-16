@@ -267,12 +267,29 @@ def p_blocks(p, edition=True):
 NUMBER_CELL = r"\d{1,2}[.)]?"
 
 
+def printed_text(el):
+    """An element's text as printed: readings, expansions and notes left out."""
+    out = [el.text or ""]
+    for k in el:
+        if isinstance(k.tag, str) and local(k) not in ("reg", "expan", "note"):
+            out.append(printed_text(k))
+        out.append(k.tail or "")
+    return "".join(out)
+
+
+def printed_number(cell):
+    """Whether a cell opens with a printed number ("1. Cheerfulnesse")."""
+    import re
+    return re.match(r"\s*\d{1,2}\s*[.)]", printed_text(cell)) is not None
+
+
 def table_reading(table):
     """How the edition reads a table: (mode, [(marker, [cells])]).
 
     "brace" (a cell spans rows): column by column, as a brace groups; a
     column of one cell is a label (marker "¶"), a column of several is the
-    branches (one "+" item each). "rows": row by row; a row of one cell is a
+    branches (one "+" item each, or "-" when the print does not number
+    them: Gouge's "Obey / Serve"). "rows": row by row; a row of one cell is a
     heading line ("¶"), any other row is one "+" item (its leading number
     cell is left out by the machine pass). "inline" (the table interrupts a
     sentence): all cells column by column, no markers."""
@@ -295,7 +312,8 @@ def table_reading(table):
             if len(cells) == 1:
                 out.append(("¶", cells))
             else:
-                out += [("+", [c]) for c in cells]
+                mark = "+" if printed_number(cells[0]) else "-"
+                out += [(mark, [c]) for c in cells]
         return "brace", out
     rows = {}
     for cell, row, col, _rs, _cs in grid:

@@ -297,8 +297,29 @@ class R:
         for item in items:
             body = etree.Element("item-body")
             body.text = item.text
+            # an item the review carried on into the list before it from the
+            # paragraph after (build_tei.merge_lists): printed as a paragraph
+            carried = item.get("change") == "#review" and not item.get("rend")
             subs = []
             for c in item:
+                if local(c) == "table" and self.layer == "orig" and carried:
+                    subs.append(c)                 # row by row, as printed
+                    continue
+                if local(c) == "table" and self.layer == "reg" and \
+                        layout.table_reading(c)[0] == "brace":
+                    # a brace set as an item (Gouge's "4. Good will. Under
+                    # which are comprised—"): its label is the item's text,
+                    # its branches a list under it
+                    for marker, cells in layout.table_reading(c)[1]:
+                        if marker == "¶":
+                            for cell in cells:
+                                x = copy.deepcopy(cell)
+                                x.tail = " "
+                                body.append(x)
+                    subs.append(c)
+                    if c.tail:
+                        body[-1].tail = (body[-1].tail or "") + c.tail
+                    continue
                 if local(c) in ("list", "p"):
                     subs.append(c)
                     if c.tail:
@@ -313,6 +334,8 @@ class R:
             txt = collapse("".join(text_parts)).strip()
             if txt:
                 if self.layer == "reg" and item.get("rend") == "paragraph":
+                    if lines and lines[-1] != "":
+                        lines.append("")       # not a run-on of the list before
                     lines += [block_start_escape(txt), ""]     # set as a paragraph
                 elif numbered and self.layer == "reg":
                     lines.append("  " * depth + "+ " + txt)
@@ -320,13 +343,22 @@ class R:
                     # run-in in print: the numerals stay in the text
                     lines.append(block_start_escape(txt))
                     lines.append("")
-                elif self.layer == "orig" and lst.get("type") == "bulleted":
+                elif self.layer == "orig" and (lst.get("type") == "bulleted" or carried):
                     lines += [block_start_escape(txt), ""]     # the edition's list
                 else:
                     lines.append("  " * depth + "- " + block_start_escape(txt))
             for s in subs:
                 if local(s) == "list":
                     self.list_block(s, depth + 1, lines)
+                    continue
+                if local(s) == "table" and self.layer == "orig":
+                    lines += table_lines(self, s)
+                    continue
+                if local(s) == "table":            # a brace's branches
+                    for marker, cells in layout.table_reading(s)[1]:
+                        t = collapse(" ".join(self.inline(c) for c in cells)).strip()
+                        if marker in ("+", "-") and t:
+                            lines.append("  " * (depth + 1) + marker + " " + t)
                     continue
                 t = self.para(s)
                 if not t:
@@ -668,9 +700,9 @@ def table_lines(r, table):
             t = collapse(" ".join(r.inline(c) for c in cells)).strip()
             if not t:
                 continue
-            if marker == "+":
+            if marker in ("+", "-"):         # "-": branches printed unnumbered
                 nested = cells[0].get("rend") == "nested"
-                lines.append(("  + " if nested else "+ ") + t)
+                lines.append(("  " if nested else "") + marker + " " + t)
             else:
                 if lines and lines[-1] != "":
                     lines.append("")
