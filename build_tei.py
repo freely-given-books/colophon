@@ -1227,6 +1227,12 @@ def align(src, tgt, report, label, owner=None):
             add_tgt(Sw[0][2], Rw, Rwi)
             for s in Sw[1:]:
                 add_tgt(s[2], [], [])
+            if owner is not None and len(Sw) == len(Rw):
+                # as many words on both sides ("mans OVVNE" -> "man's OWN"):
+                # each review word is its printed word's, so a note between
+                # them is not taken as moved
+                for s, j in zip(Sw, Rwi):
+                    owner[j] = s[2]
         elif Rw:
             # pure insertion: attach to the previous source word token, or,
             # right after a block opens on both sides ("¶ Obs. 2. Again"),
