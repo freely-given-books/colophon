@@ -305,6 +305,7 @@ body.only-orig .row, body.only-reg .row { grid-template-columns:1fr; max-width:7
   details.toc { padding:8px 12px; }
 }
 /* Edition / Printed / Both */
+.smallcaps { font-variant:small-caps; }
 .seg { display:inline-flex; border:1px solid var(--rule); border-radius:6px;
   overflow:hidden; margin:2px 0 4px; }
 .seg button { font:600 13px/1 system-ui,sans-serif; padding:7px 12px; border:0;
@@ -488,6 +489,9 @@ def main():
     m_ = re.search(r"1[5-8]\d\d", "".join(date.itertext()) if date is not None else "")
     year = m_.group(0) if m_ else "print"
     o, m = ReviewR("orig", "o-", year), ReviewR("reg", "m-", year)
+    cfg = layout.settings(a.tei)
+    if cfg.get("SMALLCAPS"):        # the printed column shows the capitals as printed
+        m.settings = dict(getattr(m, "settings", {}), SMALLCAPS=cfg["SMALLCAPS"])
     o.index(root)
     m.index(root)
     sections, toc = [], []
@@ -514,7 +518,7 @@ def main():
 
     for f in a.before:
         modern(f, "before")
-    for ident, fname, ftitle, unit in division_units(root, layout.settings(a.tei)):
+    for ident, fname, ftitle, unit in division_units(root, cfg):
         if a.only and not fname.startswith(a.only):
             continue
         if isinstance(unit, list):              # a layout file: its parts
