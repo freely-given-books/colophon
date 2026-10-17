@@ -331,6 +331,13 @@ details.opts[open] > summary { margin-bottom:4px; }
   border-radius:8px; box-shadow:0 4px 16px rgba(0,0,0,.25); padding:10px 14px;
   font:14px/1.45 system-ui,sans-serif; white-space:pre-line; }
 #tip[hidden] { display:none; }
+/* previous / next change */
+.bar { display:flex; flex-wrap:wrap; align-items:center; gap:4px 12px; }
+.step { display:inline-flex; align-items:center; gap:6px; }
+.step button { font:600 13px/1 system-ui,sans-serif; padding:7px 12px; cursor:pointer;
+  border:1px solid var(--rule); border-radius:6px; background:transparent; color:var(--fg); }
+.step .where { font:12px system-ui,sans-serif; color:var(--muted); }
+.row.focus { outline:2px solid var(--edln); outline-offset:4px; border-radius:2px; }
 """
 
 JS = """
@@ -384,6 +391,45 @@ if (matchMedia('(hover:none)').matches) {
   });
 }
 tip.addEventListener('click', () => { tip.hidden = true; });
+// previous / next change: rows holding a change the options above mark
+function marked(c) {
+  if (c.classList.contains('ed'))
+    return ![...c.classList].some(t => b.classList.contains('hide-' + t));
+  return auto.checked;
+}
+function changed() {
+  const rows = [];
+  document.querySelectorAll('.row .ch').forEach(c => {
+    const r = c.closest('.row');
+    if (r !== rows[rows.length - 1] && marked(c)) rows.push(r);
+  });
+  return rows;
+}
+const where = document.querySelector('.step .where');
+function step(d) {
+  const rows = changed();
+  if (!rows.length) { where.textContent = 'no changes marked'; return; }
+  const top = document.querySelector('header.top').offsetHeight + 40;
+  const f = document.querySelector('.row.focus');
+  let i = f ? rows.indexOf(f) : -1;
+  const seen = i >= 0 && Math.abs(f.getBoundingClientRect().top - top) < innerHeight / 2;
+  if (seen) i += d;
+  else if (d > 0) i = rows.findIndex(r => r.getBoundingClientRect().top > top + 1);
+  else i = rows.findLastIndex(r => r.getBoundingClientRect().top < top - 1);
+  if (i < 0) i = d > 0 ? rows.length - 1 : 0;
+  i = Math.min(rows.length - 1, Math.max(0, i));
+  if (f) f.classList.remove('focus');
+  rows[i].classList.add('focus');
+  where.textContent = (i + 1) + ' / ' + rows.length;
+  scrollTo({ top: rows[i].getBoundingClientRect().top + scrollY - top, behavior: 'smooth' });
+}
+document.getElementById('prev').onclick = () => step(-1);
+document.getElementById('next').onclick = () => step(1);
+document.addEventListener('keydown', e => {
+  if (e.target.closest('input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === 'n' || e.key === 'j') step(1);
+  if (e.key === 'p' || e.key === 'k') step(-1);
+});
 """
 
 
@@ -402,14 +448,16 @@ def page(title, year, sections, toc):
 @media (max-width:760px) {{ .row > .orig::before {{ content:"Printed {year}"; }} }}</style></head>
 <body>
 <header class="top"><h1>{html.escape(title)}: printed {year} and edition</h1>
-<div class="seg" role="group" aria-label="Show"><button type="button" data-c="reg">Edition</button><button type="button" data-c="orig">Printed {year}</button><button type="button" data-c="both">Both</button></div>
+<div class="bar"><div class="seg" role="group" aria-label="Show"><button type="button" data-c="reg">Edition</button><button type="button" data-c="orig">Printed {year}</button><button type="button" data-c="both">Both</button></div>
+<div class="step"><button type="button" id="prev" title="previous change (p)">◀ prev</button><button type="button" id="next" title="next change (n)">next ▶</button><span class="where"></span></div></div>
 <details class="opts" open><summary>Options</summary>
 <div class="controls"><span>Mark editor changes:</span>{boxes}
 <label><input type="checkbox" id="auto"> underline machine changes</label>
 <label><input type="checkbox" id="pages" checked> printed pages</label>
 </div>
 <p class="legend">Marked words were changed by the edition: tap one to see what was
-printed and who changed it. “Printed {year}” under a paragraph opens the printed text.</p></details></header>
+printed and who changed it. “Printed {year}” under a paragraph opens the printed text.
+◀ prev / next ▶ (keys p / n) step through the paragraphs with marked changes.</p></details></header>
 <details class="toc"><summary>Contents</summary><nav>{toc}</nav></details>
 <main>{sections}</main>
 <div id="tip" hidden></div>
