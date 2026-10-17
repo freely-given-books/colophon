@@ -38,7 +38,9 @@ The gates, every one of which a done book must pass:
   clean     nothing uncommitted in the book's folder
   verify    verify.py: the TEI rebuilds as committed, round trips, schema
   report    review-report.md has no edit left unapplied or unresolved
-  print     the print PDFs build with nothing against Lulu's rules
+  print     the print PDFs build with nothing against Lulu's rules (a footnote
+            set a page from its marker passes if RELEASE.toml's accepted_print
+            lists that exact message: the editor accepted it)
   epub      the EPUB builds and passes epubcheck
 
 Versions: a whole number vN is a print revision and matches Lulu's revision N.
@@ -251,13 +253,23 @@ def run_gates(s, outdir, log=print):
     log("  building ...")
     files, built = gate_builds(fgb.Book(d), outdir)
     res["print"] = [p for p in built if "EPUB" not in p]
+    # footnotes set a page from their marker (a Typst limitation, not a Lulu
+    # rule) that the editor has accepted, each by its message, in RELEASE.toml
+    # ("accepted_print"); any other, or a new one, still fails the gate
+    accepted = set((s["record"] or {}).get("accepted_print", []))
+    res["_accepted"] = [p for p in res["print"] if p in accepted and " footnote " in p]
+    res["print"] = [p for p in res["print"] if p not in res["_accepted"]]
     res["epub"] = [p for p in built if "EPUB" in p]
     return files, res
 
 
 def show_gates(res):
     for gate, problems in res.items():
-        print(f"    {'ok  ' if not problems else 'FAIL'} {gate}")
+        if gate.startswith("_"):
+            continue
+        extra = (f" ({len(res['_accepted'])} stray footnote(s) accepted in {RECORD})"
+                 if gate == "print" and res.get("_accepted") else "")
+        print(f"    {'ok  ' if not problems else 'FAIL'} {gate}{extra}")
         for p in problems:
             print(f"           {p}")
 
@@ -469,7 +481,7 @@ def cmd_sign(a):
         (Path(tmp) / "now").mkdir()
         files, res = run_gates(s, Path(tmp) / "now")
         show_gates(res)
-        if any(res.values()):
+        if any(v for k, v in res.items() if not k.startswith("_")):
             sys.exit("not signed off: fix what failed above first")
         lulu = []
         if point:
@@ -671,7 +683,7 @@ def cmd_make(a):
         with tempfile.TemporaryDirectory(prefix="fgb-release-") as tmp:
             built, res = run_gates(s, Path(tmp))
             show_gates(res)
-            if any(res.values()):
+            if any(v for k, v in res.items() if not k.startswith("_")):
                 failed.append(s["slug"])
                 continue
             files = []
