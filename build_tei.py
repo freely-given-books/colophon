@@ -3348,7 +3348,8 @@ def main():
 
     rebuild(text, toks)
     if OPENING_SMALLCAPS:
-        opening_smallcaps([[d.el] for d in divs])
+        opening_smallcaps([[d.el] for d in divs], root,
+                          cfg.get("SKIP_DIVISIONS", ()))
     mark_diagrams(root)
     for d in divs:
         if d.extra.get("edition_head"):
@@ -3421,7 +3422,8 @@ def build_layout(args, tree, root, text, toks, files, cfg=None):
         apply_edition_heads(log)
     rebuild(text, toks)
     if OPENING_SMALLCAPS:
-        opening_smallcaps([f["parts"] for f in files])
+        opening_smallcaps([f["parts"] for f in files], root,
+                          (cfg or {}).get("SKIP_DIVISIONS", ()))
     mark_diagrams(root)
     add_header(root, args.editor)
     write_tei(tree, args.out)
@@ -3434,17 +3436,32 @@ def build_layout(args, tree, root, text, toks, files, cfg=None):
 OPENING_SKIP = {"pb", "lb", "milestone", "fw", "note", "anchor", "label", "gap"}
 
 
-def opening_smallcaps(blocks):
+def opening_smallcaps(blocks, root, skip=()):
     """OPENING_SMALLCAPS: the first word of each division, printed in capitals
     after a drop cap (GOD, AND, COnsider), set in small capitals:
     seg[@rend="smallcaps"][@type="opening"] around it. `blocks` are the first
     elements of each division (a layout file's parts); the first <p> in them
-    is the opening paragraph. A word printed otherwise is left alone."""
+    is the opening paragraph. Every printed division is looked at too (Gouge's
+    sections, inside a layout file: "THE first clause"): its opening block, if
+    that is a <p>, into a brace that opens it, outside SKIP_DIVISIONS (`skip`).
+    A word printed otherwise is left alone."""
     def first_p(els):
         for el in els:
             p = el if local(el) == "p" else el.find(f".//{T}p")
             if p is not None:
                 return p
+        return None
+
+    def opening_p(div):
+        for c in div:
+            if not isinstance(c.tag, str) or local(c) in OPENING_SKIP | {
+                    "head", "epigraph", "argument", "opener"}:
+                continue
+            # not a scripture text set as an epigraph ("EPHES. 6. 7. With")
+            if local(c) != "p" or c.get("rend") == "epigraph" or re.match(
+                    r"\W*[A-Z]+\.\s*\d", "".join(c.itertext())):
+                return None
+            return c
         return None
 
     def caps(word):
@@ -3486,7 +3503,9 @@ def opening_smallcaps(blocks):
                 el.replace(c, seg)
                 seg.append(c)
                 return True
-            if n == "hi" or n == "seg":
+            if n == "seg" and c.get("type") == "opening":
+                return True
+            if n in ("hi", "seg", "table", "row", "cell"):
                 r = walk(c)
                 if r is not None:
                     return r
@@ -3500,6 +3519,13 @@ def opening_smallcaps(blocks):
     done = 0
     for els in blocks:
         p = first_p(els)
+        if p is not None and walk(p):
+            done += 1
+    for div in root.iter(T + "div"):
+        if any(a.get("type") in skip or local(a) in skip
+               for a in (div, *div.iterancestors())):
+            continue
+        p = opening_p(div)
         if p is not None and walk(p):
             done += 1
     return done
