@@ -23,7 +23,8 @@ rewrites the TEI) holds the book back until the editor signs it off again.
                                  improved edition between Lulu revisions
   ./fgb release make             a release of every done book: the gates,
                                  then dist/release/<date>/ (PDFs, EPUBs,
-                                 covers, CATALOG.md, catalog.json,
+                                 covers, reader and comparison pages,
+                                 CATALOG.md, catalog.json,
                                  SHA256SUMS, all flat, ready to upload as
                                  a GitHub release) and a commit on the local
                                  `stable` branch, the repository with only
@@ -686,6 +687,10 @@ def cmd_make(a):
             if any(v for k, v in res.items() if not k.startswith("_")):
                 failed.append(s["slug"])
                 continue
+            # the reader and the comparison page, linking to the downloads by
+            # the names they have in the release
+            built += fgb.build_web(fgb.Book(d), Path(tmp), built,
+                                   link=lambda n: asset_name(d, s["tag"]["version"], Path(n)))
             files = []
             for f in built:
                 dest = root / asset_name(d, s["tag"]["version"], f)

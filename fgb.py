@@ -413,6 +413,41 @@ def build_epub(bk, outdir):
     return build_one_epub(bk, outdir, e)
 
 
+def build_web(bk, outdir, built, link=lambda name: name):
+    """The web pages for each EPUB in `built`: a reader made from the EPUB
+    (epub_reader.py) and the public comparison page, the printed text beside
+    the edition (tei_review.py --public); one of each per volume. Written as
+    <epub stem>-reader.html and -compare.html; `link` gives the name a file
+    will have where the pages are read (a release renames its downloads), so
+    the pages' links between themselves and to the EPUB and PDF hold there."""
+    e = bk.cfg.get("EPUB", {})
+    side = bk.cfg.get("SIDE_BY_SIDE", {})
+    vols = e.get("volumes") or [None]
+    names = {f.name: f for f in built}
+    outs = []
+    for v in vols:
+        epub = names.get((v or e).get("file", bk.dir.name + ".epub"))
+        if epub is None:
+            continue
+        stem = epub.stem
+        pdf = names.get(stem + ".pdf") or next(
+            (f for f in built if f.suffix == ".pdf" and "cover" not in f.name), None)
+        reader, compare = outdir / f"{stem}-reader.html", outdir / f"{stem}-compare.html"
+        args = [PY, HERE / "epub_reader.py", epub, reader, "--compare", link(compare.name),
+                "--epub-link", link(epub.name)]
+        if pdf is not None:
+            args += ["--pdf", link(pdf.name)]
+        run(*args, quiet=True)
+        title = (v or {}).get("title") or e.get("title", bk.dir.name)
+        extra = (["--only", v["files"][0]] if v else
+                 [x for f in side.get("before", []) for x in ("--before", bk.dir / f)] +
+                 [x for f in side.get("after", []) for x in ("--after", bk.dir / f)])
+        run(PY, HERE / "tei_review.py", bk.tei, compare, "--public", "--title", title,
+            "--reader", link(reader.name), *extra, cwd=bk.dir, quiet=True)
+        outs += [reader, compare]
+    return outs
+
+
 def build_one_epub(bk, outdir, e):
     out = outdir / e.get("file", bk.dir.name + ".epub")
     args = [PY, HERE / "tei_epub.py", bk.tei, out, "--title", e["title"],
@@ -617,7 +652,8 @@ def cmd_build(a):
             if "pdf" in kinds:
                 files += build_pdf(bk, outdir, covers=True)
             if "epub" in kinds:
-                files += build_epub(bk, outdir)
+                epubs = build_epub(bk, outdir)
+                files += epubs + build_web(bk, outdir, files + epubs)
         except SystemExit as e:
             print(f"FAILED: {e}" if e.code not in (None, 0, 1) else "FAILED")
             failed.append(bk.name)

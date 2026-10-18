@@ -28,6 +28,7 @@ It fills the edition column; the printed column says it is not in print.
 import argparse
 import collections
 import html
+import json
 import re
 from pathlib import Path
 
@@ -40,6 +41,7 @@ from tei_epub import typst_page
 
 TYPES = [  # (class, label, shown by default)
     ("t-emendation", "wording", True),
+    ("t-omission", "words left out", True),
     ("t-grammar", "grammar (thou, hath, -eth)", True),
     ("t-spelling", "spelling", True),
     ("t-case", "capitals", True),
@@ -95,10 +97,19 @@ class ReviewR(HtmlR):
         return (f'<a class="noteref" id="{self.prefix}nr-{n}" '
                 f'href="#{self.prefix}fn-{n}"><sup>{n}</sup></a>')
 
+    public = False
+    rule_name = "machine"
+
+    def by(self, ed):
+        if ed:
+            return "by the editor"
+        return "by rule" if self.public else "by the machine"
+
     def marked(self, inner, cls, tip):
         tip = html.escape(tip, quote=True).replace("\n", "&#10;")
-        if not inner.strip():
-            inner = '<span class="gone">‸</span>' if self.layer == "reg" else inner
+        if not inner.strip() and self.layer == "reg":
+            # nothing in the edition: a caret; a space the edition adds keeps the space
+            inner = '<span class="gone">‸</span>' + inner
         return f'<span class="ch {cls}" title="{tip}">{inner}</span>'
 
     def choice(self, c):
@@ -111,21 +122,22 @@ class ReviewR(HtmlR):
             ed = [x for x in regs if x.get("resp") == "#editor"]
             au = [x for x in regs if x.get("resp") == "#auto"]
             reg = (ed or au or regs)[0]
-            who = "editor" if ed else "machine"
+            who = self.by(ed)
             typ = reg.get("type") or "spelling"
+            typ = {"abbreviation": "abbr"}.get(typ, typ)      # one toggle for both
             printed = plain("orig", orig, self.moved)
             modern = plain("reg", reg, self.moved)
             tip = f"{self.year}: {printed}\nedition: {modern}"
             if ed and au:
-                tip += f"\nmachine proposed: {plain('reg', au[0], self.moved)}"
-            tip += f"\n{typ}, by the {who}"
+                tip += f"\n{self.rule_name} proposed: {plain('reg', au[0], self.moved)}"
+            tip += f"\n{typ}, {who}"
             return self.marked(inner, f"t-{typ} {'ed' if ed else 'auto'}", tip)
         if abbr is not None:
             expan = c.find(T + "expan")
             ed = expan is not None and expan.get("resp") == "#editor"
             tip = (f"printed: {plain('orig', abbr, self.moved)}\n"
                    f"expanded: {(expan.text or '') if expan is not None else ''}\n"
-                   f"abbreviation, by the {'editor' if ed else 'machine'}")
+                   f"abbreviation, {self.by(ed)}")
             return self.marked(inner, f"t-abbr {'ed' if ed else 'auto'}", tip)
         return inner
 
@@ -141,8 +153,8 @@ class ReviewR(HtmlR):
                            if isinstance(x, etree._Comment) and x.text)
             ed = c.get("resp") == "#editor"
             tip = (f"supplied: letters lost in print ({c.get('reason', '')}), "
-                   f"certainty {c.get('cert', '?')}, by the "
-                   f"{'editor' if ed else 'machine'}" + (f"\n{why}" if why else ""))
+                   f"certainty {c.get('cert', '?')}, {self.by(ed)}"
+                   + (f"\n{why}" if why else ""))
             return self.marked(out, f"t-supplied {'ed' if ed else 'auto'}", tip)
         if n == "hi" and c.get("ana") in ("#print-only", "#edition-only"):
             tip = ("italic in print, roman in the edition"
@@ -320,6 +332,32 @@ body.only-reg .peek { display:inline-block; }
 body.only-reg .row.open > .orig { display:block; order:2; }
 .row.open .peek { color:var(--fg); border-color:var(--pb); }
 details.toc { padding:12px 16px; font:14px/1.6 system-ui,sans-serif; }
+/* a run of removed words reads as one caret */
+.ch:has(> .gone:only-child) + .ch:has(> .gone:only-child) > .gone { display:none; }
+@media (max-width:760px) {
+  .titlebar .sub { display:none; }
+  .titlebar h1 { font-size:14px; }
+  .about-btn { padding:2px 8px; font-size:12px; }
+  .bar { gap:4px 6px; }
+  .seg button, .step button { padding:6px 9px; font-size:12px; }
+  .step .where { display:none; }
+}
+.titlebar { display:flex; flex-wrap:wrap; align-items:baseline; gap:2px 10px; margin-bottom:4px; }
+.titlebar h1 { margin:0; }
+.titlebar .sub { color:var(--muted); }
+.read-link { margin-left:auto; font:13px system-ui,sans-serif; color:var(--fg); text-decoration:none;
+  border:1px solid var(--rule); border-radius:12px; padding:3px 10px; }
+.read-link + .about-btn { margin-left:0; }
+.about-btn { margin-left:auto; font:13px system-ui,sans-serif; color:var(--muted); background:none;
+  border:1px solid var(--rule); border-radius:12px; padding:3px 10px; cursor:pointer; }
+.about-btn[aria-expanded="true"] { color:var(--fg); border-color:var(--pb); }
+.about { max-width:800px; margin:12px 16px 0; padding:10px 14px; font:14px/1.5 system-ui,sans-serif;
+  background:var(--panel); border:1px solid var(--rule); border-radius:8px; }
+.about p { margin:.3em 0; }
+mark.k.ed { background:var(--ed); box-shadow:inset 0 -1px 0 var(--edln); color:inherit; padding:0 2px; }
+span.k.auto { text-decoration:underline dotted var(--auto); text-underline-offset:3px; }
+.controls label .n { color:var(--muted); font-size:12px; }
+.controls label[hidden] { display:none; }
 details.toc > summary { cursor:pointer; color:var(--muted); width:max-content; }
 details.toc a { color:inherit; }
 details.opts > summary { cursor:pointer; color:var(--muted); width:max-content; }
@@ -363,12 +401,12 @@ function setCols(v) {
   b.classList.toggle('only-reg', v === 'reg');
   b.classList.toggle('both', v === 'both');
   segs.forEach(x => x.setAttribute('aria-pressed', String(x.dataset.c === v)));
-  try { localStorage.setItem('cols', v); } catch (e) {}
+  try { localStorage.setItem(KEY + ':cols', v); } catch (e) {}
   hdr();
 }
 segs.forEach(x => x.addEventListener('click', () => setCols(x.dataset.c)));
 let saved = null;
-try { saved = localStorage.getItem('cols'); } catch (e) {}
+try { saved = localStorage.getItem(KEY + ':cols'); } catch (e) {}
 setCols(saved || (narrow.matches ? 'reg' : 'both'));
 // each paragraph: a button that opens its printed text under the edition's
 document.querySelectorAll('.row:not(.colhead):not(.head):not(.modern)').forEach(r => {
@@ -424,6 +462,44 @@ function step(d) {
   where.textContent = (i + 1) + ' / ' + rows.length;
   scrollTo({ top: rows[i].getBoundingClientRect().top + scrollY - top, behavior: 'smooth' });
 }
+// how many of each kind of change, counted in the edition column
+document.querySelectorAll('label[data-for]').forEach(l => {
+  const n = document.querySelectorAll('.reg .ch.' + l.dataset.for).length;
+  l.querySelector('.n').textContent = '(' + n.toLocaleString() + ')';
+  if (!n) l.hidden = true;
+});
+// presets: what to mark, chosen in one click; a box changed by hand is "custom"
+const store = { get(k) { try { return JSON.parse(localStorage.getItem(KEY + ':' + k)); } catch (e) { return null; } },
+                set(k, v) { try { localStorage.setItem(KEY + ':' + k, JSON.stringify(v)); } catch (e) {} } };
+const pbtn = document.querySelectorAll('.presets button');
+const tboxes = [...document.querySelectorAll('input[data-t]')];
+function showPreset(k) { pbtn.forEach(x => x.setAttribute('aria-pressed', String(x.dataset.p === k))); }
+function fire(i) { i.dispatchEvent(new Event('change')); }
+function setPreset(k) {
+  const p = PRESETS[k];
+  tboxes.forEach(i => { i.checked = p.t.includes(i.dataset.t); fire(i); });
+  auto.checked = p.auto; fire(auto);
+  if (k === 'read') setCols('reg');
+  else if (b.classList.contains('only-reg') && !narrow.matches) setCols('both');
+  showPreset(k); store.set('preset', k);
+}
+pbtn.forEach(x => x.addEventListener('click', () => setPreset(x.dataset.p)));
+[...tboxes, auto].forEach(i => i.addEventListener('change', e => {
+  if (!e.isTrusted) return;
+  showPreset(null); store.set('preset', 'custom');
+  store.set('boxes', Object.fromEntries([...tboxes, auto].map(x => [x.dataset.t || 'auto', x.checked])));
+}));
+const savedPreset = store.get('preset');
+if (savedPreset === 'custom' && store.get('boxes')) {
+  const bx = store.get('boxes');
+  [...tboxes, auto].forEach(i => { const k = i.dataset.t || 'auto'; if (k in bx) { i.checked = bx[k]; fire(i); } });
+} else if (PRESETS[savedPreset]) setPreset(savedPreset);
+else if (DEFAULT) setPreset(DEFAULT);
+// about this page: open on a first visit
+const about = document.querySelector('.about'), abtn = document.querySelector('.about-btn');
+function setAbout(o) { about.hidden = !o; abtn.setAttribute('aria-expanded', String(o)); hdr(); }
+abtn.addEventListener('click', () => { setAbout(about.hidden); store.set('seen', true); });
+if (DEFAULT && !store.get('seen')) { setAbout(true); store.set('seen', true); }
 document.getElementById('prev').onclick = () => step(-1);
 document.getElementById('next').onclick = () => step(1);
 document.addEventListener('keydown', e => {
@@ -434,35 +510,62 @@ document.addEventListener('keydown', e => {
 """
 
 
-def page(title, year, sections, toc):
+PRESETS = {  # name: (label, change types marked, routine changes underlined)
+    "read": ("Just read", [], False),
+    "wording": ("Wording changes", ["t-emendation", "t-omission", "t-grammar", "t-supplied",
+                                    "t-note"], False),
+    "every": ("Every change", [t for t, _, _ in TYPES], True),
+}
+
+ABOUT = """<p>The left column is {source}; the right is <b>this edition</b>. Each row is one
+paragraph, so you can read across.</p>
+<p>A <mark class="k ed">highlighted</mark> word is one the editor changed: tap or hover over it
+to see what {was}. A <span class="k auto">dotted</span> word was changed by rule: {rule},
+the same way throughout. A <span class="gone">‸</span> marks where words were taken out.</p>
+<p><b>Wording changes</b> (the default) marks what changes the words themselves; <b>Every
+change</b> marks spelling, capitals and punctuation too; <b>Just read</b> shows the
+edition plain. ◀ / ▶ (or the keys p and n) step from one marked paragraph to the next.
+Under <b>Details</b> you can choose each kind of change yourself.</p>"""
+
+
+def page(title, L, sections, toc, public=False, subtitle=None, reader=None):
     hide = "".join(
         f"body.hide-{t} .ch.{t}{{background:none;box-shadow:none;text-decoration:none}}"
         f"body.hide-{t} .ch.{t} .gone{{display:none}}" for t, _, _ in TYPES)
     boxes = "".join(
-        f'<label><input type="checkbox" data-t="{t}"{" checked" if on else ""}> {lab}</label>'
+        f'<label data-for="{t}"><input type="checkbox" data-t="{t}"{" checked" if on else ""}> '
+        f'{lab} <span class="n"></span></label>'
         for t, lab, on in TYPES)
+    presets = "".join(f'<button type="button" data-p="{k}">{lab}</button>'
+                      for k, (lab, _, _) in PRESETS.items())
+    preset_js = "{" + ",".join(
+        f'"{k}":{{t:{list(ts)!r},auto:{str(au).lower()}}}' for k, (_, ts, au) in PRESETS.items()) + "}"
+    routine = "routine changes (by rule)" if public else "underline machine changes"
+    sub = subtitle or L["sub"]
+    head_title = f"{title}: {sub}"
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{html.escape(title)} (side by side)</title>
+<title>{html.escape(head_title)}</title>
 <style>{CSS}{hide}
-@media (max-width:760px) {{ .row > .orig::before {{ content:"Printed {year}"; }} }}</style></head>
+@media (max-width:760px) {{ .row > .orig::before {{ content:"{L['short']}"; }} }}</style></head>
 <body>
-<header class="top"><h1>{html.escape(title)}: printed {year} and edition</h1>
-<div class="bar"><div class="seg" role="group" aria-label="Show"><button type="button" data-c="reg">Edition</button><button type="button" data-c="orig">Printed {year}</button><button type="button" data-c="both">Both</button></div>
-<div class="step"><button type="button" id="prev" title="previous change (p)">◀ prev</button><button type="button" id="next" title="next change (n)">next ▶</button><span class="where"></span></div></div>
-<details class="opts" open><summary>Options</summary>
-<div class="controls"><span>Mark editor changes:</span>{boxes}
-<label><input type="checkbox" id="auto"> underline machine changes</label>
-<label><input type="checkbox" id="pages" checked> printed pages</label>
-</div>
-<p class="legend">Marked words were changed by the edition: tap one to see what was
-printed and who changed it. “Printed {year}” under a paragraph opens the printed text.
-◀ prev / next ▶ (keys p / n) step through the paragraphs with marked changes.</p></details></header>
+<header class="top"><div class="titlebar"><h1>{html.escape(title)}</h1>
+<span class="sub">{html.escape(sub)}</span>
+{f'<a class="read-link" href="{html.escape(reader)}">Read the edition</a>' if reader else ''}<button type="button" class="about-btn" aria-expanded="false">About this page</button></div>
+<div class="bar"><div class="seg" role="group" aria-label="Show"><button type="button" data-c="reg">Edition</button><button type="button" data-c="orig">{L['short']}</button><button type="button" data-c="both">Side by side</button></div>
+<div class="seg presets" role="group" aria-label="Mark">{presets}</div>
+<div class="step"><button type="button" id="prev" title="previous change (p)">◀</button><button type="button" id="next" title="next change (n)">▶</button><span class="where"></span></div></div>
+<details class="opts"><summary>Details</summary>
+<div class="controls"><span>Mark:</span>{boxes}
+<label data-for="auto"><input type="checkbox" id="auto"> {routine} <span class="n"></span></label>
+<label><input type="checkbox" id="pages" checked> printed page numbers</label>
+</div></details></header>
+<div class="about" hidden>{ABOUT.format(**L)}</div>
 <details class="toc"><summary>Contents</summary><nav>{toc}</nav></details>
 <main>{sections}</main>
 <div id="tip" hidden></div>
-<script>const PEEK = "Printed {year}";{JS}</script>
+<script>const PEEK = "{L['short']}", PRESETS = {preset_js}, DEFAULT = {'"wording"' if public else 'null'}, KEY = {json.dumps('fgb-compare:' + title)};{JS}</script>
 </body></html>
 """
 
@@ -483,12 +586,35 @@ def main():
                     "(a big book is easier to read a volume at a time)")
     ap.add_argument("--typst-root",
                     help="Typst --root for .typ pages (default: the book folder)")
+    ap.add_argument("--public", action="store_true",
+                    help="the page for readers (a release): no editor's file paths, "
+                         "changes said to be by rule or by the editor, opening on the "
+                         "wording changes with a note on how to read it")
+    ap.add_argument("--title", help="the book's title (default: the TEI's)")
+    ap.add_argument("--reader", help="link to the reader page (a release's)")
+    ap.add_argument("--subtitle", help='the line under it (default: "printed YEAR and this edition")')
     a = ap.parse_args()
     root = etree.parse(a.tei).getroot()
     date = root.find(f".//{T}sourceDesc//{T}date")
     m_ = re.search(r"1[5-8]\d\d", "".join(date.itertext()) if date is not None else "")
     year = m_.group(0) if m_ else "print"
-    o, m = ReviewR("orig", "o-", year), ReviewR("reg", "m-", year)
+    sd = root.find(f".//{T}sourceDesc")
+    if "CCEL" in " ".join(sd.itertext() if sd is not None else []):
+        # a CCEL text: the comparison is with the text the edition is set from
+        L = dict(short="CCEL text", sub="the CCEL text and this edition", tip="CCEL",
+                 source='<b>the CCEL text</b> this edition is set from (Christian Classics '
+                        'Ethereal Library, ccel.org)', was="the CCEL text has",
+                 rule="quotation marks and dashes set as the edition sets them",
+                 missing="Not in the CCEL text.", meta="not in the CCEL text")
+    else:
+        L = dict(short=f"Printed {year}", sub=f"printed {year} and this edition", tip=year,
+                 source=f"the text as it was <b>printed in {year}</b>", was="was printed",
+                 rule="the old spelling or letterforms brought up to date (vnto → unto, ſ → s)",
+                 missing=f"Not in the {year} printing.", meta=f"not in the {year} printing")
+    o, m = ReviewR("orig", "o-", L["tip"]), ReviewR("reg", "m-", L["tip"])
+    if a.public:
+        o.public = m.public = True
+        o.rule_name = m.rule_name = "rule"
     cfg = layout.settings(a.tei)
     if cfg.get("SMALLCAPS"):        # the printed column shows the capitals as printed
         m.settings = dict(getattr(m, "settings", {}), SMALLCAPS=cfg["SMALLCAPS"])
@@ -510,9 +636,11 @@ def main():
         name = html.unescape(re.sub(r"<[^>]+>", "", h.group(1))).strip() if h else path.stem
         sections.append(
             f'<section class="div" id="{ident}"><h2>{html.escape(name)}</h2>'
-            f'<div class="meta">modern matter, not in the {year} text and not in the TEI'
-            f' · edit <code>{html.escape(str(path))}</code></div>'
-            f'<div class="row modern"><div class="orig">Not in the {year} printing.</div>'
+            + (f'<div class="meta">modern matter, {L["meta"]}</div>' if a.public else
+               f'<div class="meta">modern matter, not in the {year} text and not in the TEI'
+               f' · edit <code>{html.escape(str(path))}</code></div>')
+            +
+            f'<div class="row modern"><div class="orig">{L["missing"]}</div>'
             f'<div class="reg">{frag}</div></div></section>')
         toc.append(f'<a href="#{ident}">{html.escape(name)}</a>')
 
@@ -534,10 +662,11 @@ def main():
         name = re.sub(r"<[^>]+>", "", mh[0]) if mh else fname
         c = counts(*wrapper)
         summary = ", ".join(f"{v} {k}" for k, v in c.most_common()) or "none"
-        body = [f'<section class="div" id="{ident}"><h2>{name}</h2>',
+        meta = ("" if a.public else
                 f'<div class="meta">edit in <code>{html.escape(a.chapters)}/{fname}'
-                f'</code> · editor decisions: {summary}</div>',
-                f'<div class="row colhead"><div>Printed {year}</div><div>Edition</div></div>',
+                f'</code> · editor decisions: {summary}</div>')
+        body = [f'<section class="div" id="{ident}"><h2>{name}</h2>', meta,
+                f'<div class="row colhead"><div>{L["short"]}</div><div>Edition</div></div>',
                 f'<div class="row head"><div class="orig">{"".join(oh)}</div>'
                 f'<div class="reg">{"".join(mh)}</div></div>']
         if isinstance(unit, list):
@@ -563,7 +692,8 @@ def main():
     for f in a.after:
         modern(f, "after")
     Path(a.out).write_text(
-        page(tei_title(root), year, "\n".join(sections), " · ".join(toc)),
+        page(a.title or tei_title(root), L, "\n".join(sections), " · ".join(toc),
+             public=a.public, subtitle=a.subtitle, reader=a.reader),
         encoding="utf-8")
     extra = len(a.before) + len(a.after)
     print(f"wrote {a.out}: {len(sections) - extra} divisions, {extra} modern pages")
