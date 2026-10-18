@@ -168,6 +168,11 @@ note as `#auto` spacing readings (`note_spaces`).
 `./fgb` (`fgb.py`; `./fgb --help`) is the day-to-day command; the books
 repository's `CLAUDE.md` lists its uses.
 
+`./fgb build` and `./fgb release make` also make, for each EPUB (each
+volume), the reader page and the public comparison page (`fgb.build_web`):
+`<book>-vN-reader.html` and `<book>-vN-compare.html` in a release, linked to
+each other and to the EPUB and PDF by their release names.
+
 `./fgb release` (`release.py`) says which books are done and makes releases
 of them: a book is done when the editor's signed tag `<author>/<book>/vN`
 holds (the folder unchanged since) and it passes the gates (its
@@ -238,6 +243,16 @@ $PY colophon/tei_to_html.py source/christian-economy.tei.xml preview.html
 # (hover a word for printed / machine / editor readings); read-only
 $PY colophon/tei_review.py source/christian-economy.tei.xml side-by-side.html
 #   --before/--after FILE   modern pages (.typ or .html), as for tei_epub.py
+#   --public --title T --reader URL   the page for readers (a release's
+#                           <book>-vN-compare.html): presets (Just read /
+#                           Wording changes / Every change), a toggle and count
+#                           per kind of change, an "About this page" note,
+#                           "by rule" for the machine's changes, no file paths;
+#                           a CCEL book compares with "the CCEL text"
+# a reader page for the web, one design for every book, made from the EPUB
+# (so it reads as the ebook does): contents drawer, text size, paper / light /
+# dark, notes in a card, place remembered; self-contained
+$PY colophon/epub_reader.py book.epub book-reader.html --compare C --epub-link E --pdf P
 
 # a copy against the early text and a modern witness: likely slips
 $PY colophon/slips.py source/<book>.tei.xml witness.pdf   # or .epub, .txt, a .typ folder
