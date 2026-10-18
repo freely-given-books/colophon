@@ -117,6 +117,39 @@ def stray_footnotes(pdf):
     return out
 
 
+def split_footnotes(pdf):
+    """Footnotes Typst breaks across pages: [(page, words)] for each page whose
+    notes open with the end of a note from the page before (lines at the foot
+    of the page, set small, above its first numbered note), as "in age." at the
+    top of Gouge's vol 2 p. 20."""
+    pages = words_of(pdf)
+    heights = [w[4] - w[2] for pg in pages for ln in pg for w in ln if w[0].isalpha()]
+    if not heights:
+        return []
+    body = statistics.median(heights)
+    out = []
+    for i, pg in enumerate(pages):
+        lines = [ln for ln in pg if ln]
+        if not lines:
+            continue
+        foot = 0.6 * max(w[4] for l in lines for w in l)
+        notes = [ln for ln in lines if ln[0][2] >= foot and
+                 max(w[4] - w[2] for w in ln) < 0.95 * body]
+        if not notes:
+            continue
+        first_num = next((k for k, ln in enumerate(notes) if re.match(r"\d+\D", ln[0][0] + " ")
+                          and not re.fullmatch(r"\d+", " ".join(w[0] for w in ln))), None)
+        before = notes[:first_num] if first_num is not None else []
+        # the page number alone is not a note; the lines must sit just above the
+        # first note (no body text between)
+        before = [ln for ln in before if not re.fullmatch(r"\d+", " ".join(w[0] for w in ln))]
+        if before and first_num is not None:
+            gap = notes[first_num][0][2] - before[-1][0][4]
+            if gap < body:
+                out.append((i + 1, " ".join(w[0] for ln in before for w in ln)))
+    return out
+
+
 def check(pdf):
     """(problems, summary) for one PDF."""
     pages = pages_of(pdf)
@@ -147,6 +180,8 @@ def check(pdf):
         problems.append(f"inside margin {got:.3f}in; Lulu's for {n} pages is {want}in")
     for num, at, mark in stray_footnotes(pdf):
         problems.append(f"footnote {num} is set on page {at}, its marker on page {mark}")
+    for at, words in split_footnotes(pdf):
+        problems.append(f"a footnote is broken over to page {at}: “{words[:50]}”")
     closest = {k: min(v for v, _ in vals) for k, vals in edges.items() if vals}
     summary = (f"{n} pages, inside {got:.3f}in (Lulu {want}in); closest to the trim: " +
                ", ".join(f"{k} {v:.2f}in" for k, v in closest.items()))
