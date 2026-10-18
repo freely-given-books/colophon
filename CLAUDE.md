@@ -251,7 +251,9 @@ $PY colophon/tei_review.py source/christian-economy.tei.xml side-by-side.html
 #                           a CCEL book compares with "the CCEL text"
 # a reader page for the web, one design for every book, made from the EPUB
 # (so it reads as the ebook does): contents drawer, text size, paper / light /
-# dark, notes in a card, place remembered; self-contained
+# dark, notes in a card, place remembered; self-contained but for the
+# fetch(bible) enhancer (scripture references open the passage, BSB only;
+# --bible none leaves it out)
 $PY colophon/epub_reader.py book.epub book-reader.html --compare C --epub-link E --pdf P
 
 # a copy against the early text and a modern witness: likely slips
