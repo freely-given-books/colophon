@@ -16,7 +16,11 @@ The reader adds: a top bar (contents, text size, paper / light / dark, links
 to the comparison page and the downloads given), a contents drawer that
 follows the reading, notes that open in a card where they are called, a
 progress bar, and the reader's place and settings remembered in the browser.
-Nothing is loaded from elsewhere.
+
+Scripture references become links that open the passage on the page, through
+the fetch(bible) enhancer (https://fetch.bible/access/enhancer/), in the BSB
+only (--bible; --bible none leaves it out). It is the one thing the page loads
+from elsewhere.
 """
 
 import argparse
@@ -254,6 +258,11 @@ JS = r"""
     body.querySelectorAll('a[role="doc-backlink"]').forEach(x => x.remove());
     card.innerHTML = '<button class="x" aria-label="Close">×</button>' + body.innerHTML +
       '<a class="go" href="#' + note.id + '">Go to the note</a>';
+    // scripture links in the note (the enhancer's): a click passes to the original
+    const orig = note.querySelectorAll('.fb-enhancer-link');
+    card.querySelectorAll('.fb-enhancer-link').forEach((c, i) => c.addEventListener('click', ev => {
+      ev.preventDefault(); ev.stopPropagation(); card.classList.remove('open');
+      if (orig[i]) orig[i].click(); }));
     card.querySelector('.x').onclick = () => card.classList.remove('open');
     card.querySelector('.go').onclick = () => card.classList.remove('open');
     card.classList.add('open');
@@ -299,11 +308,15 @@ def page(book, body, toc, a):
     author = html.escape(book["author"])
     css = "\n".join(book["get"](c).decode("utf-8") for c in book["css"])
     ver = f" · {html.escape(a.version)}" if a.version else ""
+    # scripture references as links to the passage, in the one translation given
+    enhancer = ("" if a.bible == "none" else
+                f'\n<script type="module" crossorigin src="https://collection.fetch.bible/enhance.js" '
+                f'data-trans="{html.escape(a.bible)}"></script>')
     return f"""<!doctype html>
 <html lang="{html.escape(book['lang'])}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title} — {author}</title>
-<meta name="generator" content="colophon epub_reader.py">
+<meta name="generator" content="colophon epub_reader.py">{enhancer}
 <style>{css}</style>
 <style>{CSS}</style>
 </head><body>
@@ -339,6 +352,9 @@ def main():
     ap.add_argument("--epub-link", dest="epub_url", help="link to the EPUB download")
     ap.add_argument("--pdf", help="link to the PDF download")
     ap.add_argument("--version", help="the edition's version, shown in the bar (v6.1)")
+    ap.add_argument("--bible", default="eng_bsb",
+                    help="the translation the fetch(bible) enhancer shows for scripture "
+                         "references (default eng_bsb, the BSB); none: no enhancer")
     a = ap.parse_args()
     book = read_epub(a.epub)
     parts = []
