@@ -4,6 +4,8 @@ Claude (in the books-freelygiv-ing repository) how to bring it in.
 
   ./fgb export DIR                    # the newest release in dist/release/
   ./fgb export DIR --release FOLDER   # another release folder
+  ./fgb export DIR --lulu FOLDER      # Lulu's print-ready ZIPs, for books
+                                      # whose covers are not built here
 
 DIR gets:
   IMPORT.md             the import, step by step, for Claude in the site repo
@@ -15,16 +17,25 @@ DIR gets:
 
 Lulu links and notes come from books/publishing.toml in the books repository
 (outside the book folders, so editing it never holds a signed-off book back).
+
+A book whose cover is made outside the repository (no cover*.typ, so the
+release has no cover files) still gets its front cover: the image its EPUB
+uses (EPUB["cover"] in editorial.py). Its print-ready ZIP is Lulu's own, from
+--lulu: the ZIP Lulu gives for download, named <product id>_print-ready.zip,
+the id from the book's Lulu link (".../product-dy7vjp4.html").
 """
 
 import json
+import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import tomllib
 import zipfile
 from pathlib import Path
 
+import fgb
 import library
 
 REPO = library.ROOT
@@ -52,14 +63,15 @@ the owner the plan (which books change, which are new) before writing.
   - `<book>-vN.pdf`: the print interior; `<book>-vN-cover.pdf`: the Lulu cover
   - `<book>-vN.epub`, or `vN.M`: an ebook improved since print revision N
     (its PDF is still revision N's, which is what Lulu sells)
-  - `<book>-vN-cover-front.png`: the front cover (also the ebook's)
+  - `<book>-vN-cover-front.png` (or `.jpg`): the front cover
   - `print-ready.zip` (`print-ready-vol-N.zip`): interior and cover for Lulu
+    (for a few books, Lulu's own download of them, with its file names)
 
 ## Each book
 
 1. Copy into `data/src/books/<slug>/content/`, renamed to the site's stable
    names so the R2 URLs do not change: `<slug>.pdf`, `<slug>.epub`,
-   `print-ready.zip`, and the front cover as `cover.jpg` (convert the PNG;
+   `print-ready.zip`, and the front cover as `cover.jpg` (convert a PNG;
    keep its full size). Leave other files there alone unless the book's
    `note` says otherwise.
 2. In `book.yaml`: set `pages` from `site.json` (the current editions' counts
@@ -109,7 +121,78 @@ def page_count(pdf):
     return int(out.split("Pages:")[1].split()[0])
 
 
-def export(rel, out):
+def product_id(url):
+    """Lulu's product id from a shop link: .../product-dy7vjp4.html -> dy7vjp4."""
+    m = re.search(r"/product-([a-z0-9]+)", url or "")
+    return m.group(1) if m else None
+
+
+def lulu_front(z, png, dpi=200):
+    """The front panel of the cover in Lulu's print-ready ZIP, as a PNG: the
+    right-hand trim of the wrap, the trim size read from the interior (whose
+    pages Lulu sets with 0.125in bleed). False if the ZIP is not Lulu's shape."""
+    with tempfile.TemporaryDirectory() as tmp, zipfile.ZipFile(z) as zf:
+        names = zf.namelist()
+        cover = next((n for n in names if n.endswith("_cover.pdf")), None)
+        inner = next((n for n in names if n.endswith("_interior.pdf")), None)
+        if not (cover and inner):
+            return False
+        zf.extract(cover, tmp)
+        zf.extract(inner, tmp)
+        size = lambda f: [float(x) for x in subprocess.run(
+            ["pdfinfo", str(Path(tmp) / f)], capture_output=True, text=True,
+            check=True).stdout.split("Page size:")[1].split("pts")[0].split(" x ")]
+        (iw, ih), (cw, ch) = size(inner), size(cover)
+        bleed = 9                                   # 0.125in, in points
+        w, h = iw - 2 * bleed, ih - 2 * bleed       # the trim
+        scale = dpi / 72
+        subprocess.run(["pdftoppm", "-r", str(dpi), "-png", "-singlefile",
+                        "-x", str(round((cw - bleed - w) * scale)), "-y", str(round(bleed * scale)),
+                        "-W", str(round(w * scale)), "-H", str(round(h * scale)),
+                        str(Path(tmp) / cover), str(png.with_suffix(""))], check=True)
+    return True
+
+
+def own_covers(b, d, lulu_dir, links):
+    """For a book whose covers are made outside the repository: the EPUB's
+    front cover image, and Lulu's print-ready ZIP(s) from lulu_dir. The
+    names of the files added; what is missing, said."""
+    added = []
+    links = links if isinstance(links, list) else [links]
+    zips = [lulu_dir / f"{product_id(u)}_print-ready.zip" if lulu_dir and product_id(u)
+            else None for u in links]
+    bk = fgb.Book(REPO / "books" / b["book"])
+    e = bk.cfg.get("EPUB", {})
+    images = [v.get("cover") for v in e.get("volumes", [])] or [e.get("cover")]
+    for n, img in enumerate(images, 1):
+        if not img or img.endswith(".typ") or not (bk.dir / img).exists():
+            print(f"    no front cover image for {b['book']}")
+            continue
+        vol = f"-vol-{n}" if len(images) > 1 else ""
+        z = zips[n - 1] if n <= len(zips) else None
+        # Lulu's cover holds the front at print resolution; the EPUB's image
+        # is often small (384px), so it is the fallback
+        png = d / f"{b['folder']}-{b['version']}-cover{vol}-front.png"
+        if z and z.exists() and lulu_front(z, png):
+            added.append(png.name)
+            continue
+        name = f"{b['folder']}-{b['version']}-cover{vol}-front{Path(img).suffix}"
+        shutil.copy2(bk.dir / img, d / name)
+        added.append(name)
+    for n, (url, z) in enumerate(zip(links, zips), 1):
+        pid = product_id(url)
+        name = f"print-ready-vol-{n}.zip" if len(links) > 1 else "print-ready.zip"
+        if z and z.exists():
+            shutil.copy2(z, d / name)
+            added.append(name)
+        else:
+            print(f"    no print cover for {b['book']}: Lulu's "
+                  f"{pid + '_print-ready.zip' if pid else 'ZIP'} "
+                  + ("is not in --lulu" if lulu_dir else "(give --lulu)"))
+    return added
+
+
+def export(rel, out, lulu_dir=None):
     cat = json.loads((rel / "catalog.json").read_text(encoding="utf-8"))
     pub = tomllib.loads(PUBLISHING.read_text(encoding="utf-8")) if PUBLISHING.exists() else {}
     site = []
@@ -133,12 +216,14 @@ def export(rel, out):
                     zf.write(rel / c[0], c[0])
                 zips.append(z.name)
         p = pub.get(b["book"], {})
+        if not covers:
+            zips += own_covers(b, d, lulu_dir, p.get("lulu", ""))
         site.append({"book": b["book"], "slug": p.get("slug", b["folder"]),
                      "title": b["title"], "author": b["author"],
                      "version": b["version"], "summary": b["summary"],
                      "pages": {n: page_count(rel / n) for n in interiors},
                      "lulu": p.get("lulu", ""), "note": p.get("note", ""),
-                     "files": sorted(keep) + zips})
+                     "files": sorted(keep + zips)})
         print(f"  {b['book']} {b['version']}: {len(keep) + len(zips)} file(s)")
     shutil.copy2(rel / "catalog.json", out / "catalog.json")
     (out / "site.json").write_text(json.dumps(site, indent=2, ensure_ascii=False) + "\n",
@@ -162,4 +247,4 @@ def main(a):
         shutil.rmtree(out)
     out.mkdir(parents=True, exist_ok=True)
     print(f"export of {rel.name} into {out}")
-    export(rel, out)
+    export(rel, out, Path(a.lulu).expanduser().resolve() if a.lulu else None)

@@ -37,7 +37,9 @@ works from any folder.
                                   dist/release/<date>/ and the stable branch
   ./fgb export DIR [--release R]  the newest release (or R) laid out for the
                                   books.freely.giving site in DIR, with an
-                                  IMPORT.md for the site's Claude (export.py)
+                                  IMPORT.md for the site's Claude (export.py);
+                                  --lulu FOLDER: Lulu's print-ready ZIPs for
+                                  books whose covers are not built here
 
 BOOK is any part of the book's folder name ("gouge", "perkins", "simon");
 leave it out when you are inside the book's folder.
@@ -730,6 +732,8 @@ def main():
     p.add_argument("dir", metavar="DIR", help="folder to export to (new, or an earlier export)")
     p.add_argument("--release", help="release folder (default: the newest in dist/release/)")
     p.add_argument("--force", action="store_true", help="replace an earlier export in DIR")
+    p.add_argument("--lulu", metavar="FOLDER", help="Lulu's print-ready ZIPs "
+                   "(<product id>_print-ready.zip), for books whose covers are not built here")
     p.set_defaults(fn=lambda a: __import__("export").main(a))
     p = sub.add_parser("find")
     p.add_argument("args", nargs="+", metavar="[BOOK] WORD")
