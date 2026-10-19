@@ -46,9 +46,12 @@ The gates, every one of which a done book must pass:
 
 Versions: a whole number vN is a print revision and matches Lulu's revision N.
 A point version vN.M is an improved edition between Lulu revisions (an ebook
-fix, a correction not yet sent to Lulu): every file of it is named vN.M, and
-the next whole version is still N+1. Its sign-off says whether its print is
-still revision N's, page for page as rendered (the tag message, the catalog).
+fix, a correction not yet sent to Lulu): its EPUBs and web pages are named
+vN.M; its print stays revision N's, so a release builds the print PDFs and
+covers from the vN tag and names them vN (the PDF is what Lulu has), and print
+corrections made since wait for the next whole version, N+1. Its sign-off says
+whether its print is still revision N's, page for page as rendered (the tag
+message, the catalog).
 
 Signatures are checked against `allowed_signers` at the books repository's
 root (ssh-keygen's format), so anyone can check a tag the same way:
@@ -633,9 +636,9 @@ def catalog(rid, entries, colophon, trial=False):
                + ("" if e["signed_off"]["signature_verified"] else " (signature not verified)"),
                f"- template: {e['template']}" if e["template"] else "- template: -"]
         if is_point(e["version"]):
-            md.append(f"- a point version: an improved edition after Lulu revision "
-                      f"{print_version(e['version'])[1:]} (the sign-off note says whether "
-                      "its print is still that revision's)")
+            md.append(f"- a point version: an improved ebook after Lulu revision "
+                      f"{print_version(e['version'])[1:]}; the print PDFs are that "
+                      f"revision's ({print_version(e['version'])}, built from its tag)")
         if e["signed_off"]["note"]:
             md.append(f"- sign-off note: {e['signed_off']['note']}")
         for x in e["sources"]:
@@ -687,13 +690,23 @@ def cmd_make(a):
             if any(v for k, v in res.items() if not k.startswith("_")):
                 failed.append(s["slug"])
                 continue
+            # a point version's print is revision N's: the PDFs and covers
+            # built at the vN tag, named vN; its EPUBs carry vN.M
+            version = s["tag"]["version"]
+            printed = version
+            if is_point(version):
+                printed = print_version(version)
+                print(f"  the print at {printed} ...")
+                print_files = print_at(f"{s['slug']}/{printed}", Path(tmp) / "print")
+                built = [f for f in built if f.suffix == ".epub"] + print_files
+            name = lambda f: asset_name(d, version if Path(f).suffix in (".epub", ".html")
+                                        else printed, Path(f))
             # the reader and the comparison page, linking to the downloads by
             # the names they have in the release
-            built += fgb.build_web(fgb.Book(d), Path(tmp), built,
-                                   link=lambda n: asset_name(d, s["tag"]["version"], Path(n)))
+            built += fgb.build_web(fgb.Book(d), Path(tmp), built, link=name)
             files = []
             for f in built:
-                dest = root / asset_name(d, s["tag"]["version"], f)
+                dest = root / name(f)
                 shutil.copy2(f, dest)
                 files.append({"name": dest.name, "bytes": dest.stat().st_size,
                               "sha256": sha256(dest)})
