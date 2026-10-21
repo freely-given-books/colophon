@@ -394,8 +394,9 @@ def check_all(jobs):
 
 
 def render_front(bk, cover, outdir, extra=(), root=REPO):
-    """The front panel of a panel_cover.typ cover as an image at the trim
-    size, 150 ppi: the ebook cover, and the picture for a web page."""
+    """The front panel of a cover (panel_cover.typ's, or any that takes
+    --input front-only=true) as an image at the trim size, 150 ppi: the
+    ebook cover, and the picture for a web page."""
     img = outdir / (cover.stem + "-front.png")
     print(f"typst: {cover.relative_to(root)} (front panel)")
     run("typst", "compile", "--root", root, "--input", "front-only=true", *extra,
@@ -541,7 +542,10 @@ def build_pdf(bk, outdir, covers=False, problems=None, root=REPO):
             print(f"cover: {geometry[interior_of(f, files)][0]} pages, from "
                   f"{Path(interior_of(f, files)).with_suffix('.pdf').name}")
     for f in cover_files:
-        if "panel-cover(" in (bk.dir / f).read_text(encoding="utf-8"):
+        # a panel_cover.typ cover, or a book's own design that takes
+        # --input front-only=true (the 1689 Confession's)
+        src = (bk.dir / f).read_text(encoding="utf-8")
+        if "panel-cover(" in src or "front-only" in src:
             outs.append(render_front(bk, bk.dir / f, outdir,
                                      cover_inputs(geometry.get(interior_of(f, files))), root))
     return outs
