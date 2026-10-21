@@ -786,6 +786,9 @@ def head_lines(r, h, div, level):
     return [f"{'=' * level} {t}", ""]
 
 
+INLINE_START = re.compile(r"#(footnote|emph|strong|smallcaps|super)\[")
+
+
 def sp_lines(r, sp, level):
     """A speech: the speaker ("Christian:") opens its first paragraph; any
     further paragraphs or verse follow as blocks of their own. With
@@ -797,15 +800,19 @@ def sp_lines(r, sp, level):
     if not name:
         return lines
     k = next((i for i, x in enumerate(lines) if x), None)
+    # a first line opening with a block (#quote, #align, ...) stands on its
+    # own; one opening with inline markup (a note before the first word, an
+    # italic word) is the speech's paragraph
+    block = k is None or (lines[k].startswith("#") and not INLINE_START.match(lines[k]))
     if speech_blocks(r):
         m = re.fullmatch(r"(.*?)(\W*)", name, re.S)
         name = f"#smallcaps[{m.group(1)}]{m.group(2)}"
-        if k is None or lines[k].startswith("#"):
+        if block:
             lines[k or 0:k or 0] = [f"#speech[{name}]", ""]
         else:
             lines[k] = f"#speech[{name} {lines[k]}]"
         return lines
-    if k is None or lines[k].startswith("#"):
+    if block:
         lines[k or 0:k or 0] = [block_start_escape(name), ""]
     else:
         lines[k] = name + " " + lines[k]
