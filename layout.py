@@ -214,7 +214,9 @@ def text_follows(p, node):
         if child is node:
             seen = True
             continue
-        if seen and ((child.tail or "").strip() or "".join(child.itertext()).strip()):
+        # a block after it (the second of a parallel pair) is not text
+        if seen and ((child.tail or "").strip() or
+                     local(child) not in BLOCK_IN_P and "".join(child.itertext()).strip()):
             return True
     return bool((node.tail or "").strip())
 
