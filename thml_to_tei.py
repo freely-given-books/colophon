@@ -113,9 +113,16 @@ def inline(src, dst):
             kids = [x for x in c if isinstance(x.tag, str)]
             if len(kids) == 1 and kids[0].tag == "p" and not (c.text or "").strip():
                 inline(kids[0], el)     # a note of one paragraph: its text
+            elif kids and all(k.tag == "p" for k in kids) and \
+                    not (c.text or "").strip():
+                el.text = c.text        # a note of several paragraphs
+                for k in kids:
+                    inline(k, tei("p", el, xml_id=xid(k)))
+                    el[-1].tail = k.tail
             else:
                 inline(c, el)
-        elif n in ("span", "a", "font", "sup", "sub", "name", "added", "foreign", "cite"):
+        elif n in ("span", "a", "font", "sup", "sub", "name", "added", "foreign", "cite",
+                   "date"):
             el = tei("hi" if n in ("sup", "sub") else "seg", dst,
                      rend=n if n in ("sup", "sub") else
                      "smallcaps" if smallcaps(c) else None)
@@ -240,6 +247,36 @@ def block(src, dst):
         # printed: indented both sides (the review's #block(inset: ...))
         p = tei("p", tei("argument", dst, xml_id=xid(src)), rend="inset")
         inline(src, p)
+    elif n == "table":
+        # a grid of columns set against each other (Owen's antithesis,
+        # "Universalists" | "Scriptural Redemption"): one TEI table per
+        # column, a row per cell, the header cell a label, so the book can
+        # pair them (PARALLEL_TABLES); a cell's one paragraph is its text
+        # (in a paragraph of their own, where TCP texts have their tables)
+        trs = list(src.iter("tr"))
+        rows = [[c for c in tr if isinstance(c.tag, str)] for tr in trs]
+        holder = tei("p", dst, xml_id=xid(src))
+        for k in range(max(len(r) for r in rows)):
+            tbl = tei("table", holder, xml_id=f"{xid(src)}-{k + 1}")
+            for tr, cells in zip(trs, rows):
+                if k >= len(cells):
+                    continue
+                c = cells[k]
+                row = tei("row", tbl, xml_id=f"{xid(tr)}-{k + 1}")
+                cell = tei("cell", row, xml_id=xid(c),
+                           role="label" if c.tag == "th" else None)
+                kids = [x for x in c if isinstance(x.tag, str)]
+                if len(kids) == 1 and kids[0].tag == "p" and \
+                        not (c.text or "").strip() and not (kids[0].tail or "").strip():
+                    inline(kids[0], cell)
+                else:
+                    inline(c, cell)
+                number_cell(cell)
+            if k:
+                holder[-2].tail = "\n"
+    elif n == "attr":
+        # a signature under an epistle (Goold's Owen: "JOHN OWEN.")
+        inline(src, tei("signed", dst, xml_id=xid(src)))
     elif re.fullmatch(r"div\d?", n):
         division(src, dst, "section", str(1 + sum(
             1 for c in dst if isinstance(c.tag, str) and c.tag == T + "div")))
@@ -248,6 +285,23 @@ def block(src, dst):
 
 
 APPARATUS = {"contents": "contents", "indexes": "index", "index": "index"}
+
+
+def number_cell(cell):
+    """A cell opening with its printed number ("1. Christ died ...") as two
+    cells, the number and the text, as TCP tables have them (the machine
+    pass then reads the row as an item)."""
+    holder, attr = cell, "text"
+    if not (cell.text or "").strip() and len(cell) and cell[0].tag == T + "pb":
+        holder, attr = cell[0], "tail"     # a page break before the number
+    m = re.match(r"(\s*\d{1,2}\.)\s+", getattr(holder, attr) or "")
+    if not m:
+        return
+    setattr(holder, attr, getattr(holder, attr)[m.end():])
+    num = etree.Element(T + "cell")
+    num.text = m.group(1).strip()
+    num.tail = " "
+    cell.addprevious(num)
 
 
 def division(d, parent, typ, n):
@@ -398,7 +452,8 @@ def top_divisions(body):
             raise ValueError(f"ThML.body holds <{d.tag}>; expected div1 ...")
         if (d.get("type") or "").lower() == "work":
             for c in d:
-                if not isinstance(c.tag, str) or c.tag == "pb":
+                # scripContext: an empty marker naming the Bible version
+                if not isinstance(c.tag, str) or c.tag in ("pb", "scripContext"):
                     continue
                 if not re.fullmatch(r"div\d", c.tag):
                     raise ValueError(f"ThML Work div holds <{c.tag}> (id {c.get('id')})")
