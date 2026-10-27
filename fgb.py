@@ -404,7 +404,9 @@ def render_front(bk, cover, outdir, extra=(), root=REPO):
     return img
 
 
-def build_epub(bk, outdir):
+def build_epub(bk, outdir, root=REPO):
+    """The EPUB(s) into outdir. root: the repository the book is in (another
+    checkout of it, for a book as it was at a sign-off)."""
     e = bk.cfg.get("EPUB")
     if not e:
         sys.exit(f"{bk.name}: no EPUB settings in source/editorial.py (see ./fgb --help)")
@@ -414,9 +416,9 @@ def build_epub(bk, outdir):
         outs = []
         for v in e["volumes"]:
             outs += build_one_epub(bk, outdir, {**{k: x for k, x in e.items()
-                                                    if k != "volumes"}, **v})
+                                                    if k != "volumes"}, **v}, root)
         return outs
-    return build_one_epub(bk, outdir, e)
+    return build_one_epub(bk, outdir, e, root)
 
 
 def build_web(bk, outdir, built, link=lambda name: name):
@@ -454,7 +456,7 @@ def build_web(bk, outdir, built, link=lambda name: name):
     return outs
 
 
-def build_one_epub(bk, outdir, e):
+def build_one_epub(bk, outdir, e, root=REPO):
     out = outdir / e.get("file", bk.dir.name + ".epub")
     args = [PY, HERE / "tei_epub.py", bk.tei, out, "--title", e["title"],
             "--author", e["author"]]
@@ -466,7 +468,7 @@ def build_one_epub(bk, outdir, e):
         if cover.suffix == ".typ":
             # a Typst cover: its front panel, rendered now, so no cover image
             # has to be kept in git
-            cover = render_front(bk, cover, outdir)
+            cover = render_front(bk, cover, outdir, root=root)
             extra = [cover]
         args += ["--cover", cover]
     for k in ("css", "before", "after"):

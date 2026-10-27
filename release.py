@@ -6,8 +6,10 @@ A book is done when the editor signs a version of it off: a signed git tag
 <author>/<book>/v<N> on a commit whose book folder holds a RELEASE.toml
 (what the edition is made from, with checksums). The tag is the sign-off;
 nothing else makes a book done. A tag counts while the book's folder is as
-it was tagged: any change after it (a correction, a colophon release that
-rewrites the TEI) holds the book back until the editor signs it off again.
+it was tagged: after any change (a correction, a new template, a colophon
+release that rewrites the TEI) the book is held back, and a release carries
+its last signed version, built from the tag, until the editor signs it off
+again. Books move on one at a time; none drops out of a release for it.
 
   ./fgb release                  every book with a RELEASE.toml or a tag:
                                  done, changed since its sign-off, or not
@@ -311,7 +313,8 @@ def cmd_status(a):
             print(f"      changed: {f}")
         if gh and t and s.get("changed"):
             print(f"::warning::{s['slug']} changed since its sign-off "
-                  f"({t['tag']}); it leaves the next release until it is signed off again")
+                  f"({t['tag']}); the next release carries its signed version until it "
+                  "is signed off again")
         bad = gate_record(s)
         for p in bad:
             print(f"      {p}")
@@ -416,9 +419,12 @@ def next_point(d):
     return f"{n[0]}.{(n[1] if len(n) > 1 else 0) + 1}"
 
 
-def print_at(tag, outdir):
-    """Build the book's print PDFs and covers as they were at a sign-off
-    (a checkout of the tag; the templates it imports from the cache)."""
+def build_at(tag, outdir, epub=False, then=None):
+    """Build the book as it was at a sign-off (a checkout of the tag, with
+    this colophon; the templates it imports from the cache): its print PDFs
+    and covers, and with epub its EPUB(s). then(bk, files) runs before the
+    checkout goes (the web pages, the catalog entry); its result is returned
+    with the files."""
     book = Path("books") / tag.rsplit("/v", 1)[0]
     outdir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="fgb-signed-") as tmp:
@@ -430,9 +436,17 @@ def print_at(tag, outdir):
             for m in sorted(set(typ.split())):
                 packages.ensure(*m[len("@local/"):].split(":"))
             bk = fgb.Book(wt / book)
-            return fgb.build_pdf(bk, outdir, covers=True, root=wt)
+            files = fgb.build_pdf(bk, outdir, covers=True, root=wt)
+            if epub:
+                files += fgb.build_epub(bk, outdir, root=wt)
+            return files, (then(bk, files) if then else None)
         finally:
             git("worktree", "remove", "--force", str(wt), check=False)
+
+
+def print_at(tag, outdir):
+    """The book's print PDFs and covers as they were at a sign-off."""
+    return build_at(tag, outdir)[0]
 
 
 def page_images(pdf, outdir):
@@ -563,11 +577,13 @@ def gitmodules_without(dropped):
     return "".join(keep) if gone else None
 
 
-def stable_commit(rid, done, catalog_md, catalog_json, branch=BRANCH, extra=()):
+def stable_commit(rid, done, catalog_md, catalog_json, branch=BRANCH, extra=(),
+                  carried=()):
     """A commit on the local `stable` branch: HEAD's tree with only the done
-    books (every other books/<author>/<book>/ folder left out) and the
-    catalog. Its parent is the last stable commit, so `git pull` works."""
-    keep = {slug(s["dir"]) for s in done}
+    books (every other books/<author>/<book>/ folder left out), the carried
+    ones as they were at their sign-off, and the catalog. Its parent is the
+    last stable commit, so `git pull` works."""
+    keep = {slug(s["dir"]) for s in list(done) + list(carried)}
     env = dict(os.environ, GIT_INDEX_FILE=str(Path(tempfile.mkdtemp()) / "index"))
     g = lambda *a, inp=None: subprocess.run(["git", "-C", str(REPO), *a], env=env,
                                             input=inp, capture_output=True,
@@ -580,6 +596,10 @@ def stable_commit(rid, done, catalog_md, catalog_json, branch=BRANCH, extra=()):
             drop.add("/".join(parts[:3]))
     for p in sorted(drop):
         g("rm", "-r", "--cached", "-q", p)
+    for s in carried:
+        folder = f"books/{s['slug']}"
+        g("rm", "-r", "--cached", "-q", "--ignore-unmatch", folder)
+        g("read-tree", f"--prefix={folder}/", f"{s['tag']['tag']}:{folder}")
     files = [("CATALOG.md", catalog_md), ("catalog.json", catalog_json), *extra]
     modules = gitmodules_without(drop)
     if modules is not None:
@@ -593,7 +613,9 @@ def stable_commit(rid, done, catalog_md, catalog_json, branch=BRANCH, extra=()):
     if parent and out("rev-parse", f"{parent}^{{tree}}") == tree:
         return out("rev-parse", parent), False
     msg = f"Release {rid}\n\n" + "".join(
-        f"{s['slug']} {s['tag']['version']} ({s['tag']['tag']})\n" for s in done) + \
+        f"{s['slug']} {s['tag']['version']} ({s['tag']['tag']})\n" for s in done) + "".join(
+        f"{s['slug']} {s['tag']['version']} ({s['tag']['tag']}, carried)\n"
+        for s in carried) + \
         f"\nfrom {out('rev-parse', 'HEAD')} on {out('rev-parse', '--abbrev-ref', 'HEAD')}\n"
     commit = g("commit-tree", tree, *(["-p", parent] if parent else []), inp=msg)
     git("update-ref", f"refs/heads/{branch}", commit)
@@ -613,7 +635,9 @@ def catalog(rid, entries, colophon, trial=False):
           "folder is exactly as it was signed off. Each book was checked again for",
           "this release: its sources match the checksums in its `RELEASE.toml`, the",
           "TEI rebuilds as committed (verify.py), every review edit is applied, the",
-          "print PDFs keep Lulu's rules and the EPUBs pass epubcheck.", "",
+          "print PDFs keep Lulu's rules and the EPUBs pass epubcheck. A book changed",
+          "since its sign-off and not yet signed off again is carried: its signed",
+          "version, built from its tag (it was checked when it was signed off).", "",
           "Check a sign-off yourself:", "",
           "```sh",
           "git -c gpg.ssh.allowedSignersFile=allowed_signers tag -v <author>/<book>/vN",
@@ -635,6 +659,9 @@ def catalog(rid, entries, colophon, trial=False):
                f"signed off {e['signed_off']['date']} by {e['signed_off']['signer']}"
                + ("" if e["signed_off"]["signature_verified"] else " (signature not verified)"),
                f"- template: {e['template']}" if e["template"] else "- template: -"]
+        if e.get("carried"):
+            md.append("- changed since this sign-off and not signed off again: this "
+                      "release carries the signed version, built from its tag")
         if is_point(e["version"]):
             md.append(f"- a point version: an improved ebook after Lulu revision "
                       f"{print_version(e['version'])[1:]}; the print PDFs are that "
@@ -656,6 +683,29 @@ def catalog(rid, entries, colophon, trial=False):
     return "\n".join(md) + "\n", json.dumps(data, indent=2, ensure_ascii=False) + "\n"
 
 
+def entry(s, bk, files, carried=False):
+    """A book's entry in the catalog."""
+    e = bk.cfg.get("EPUB", {})
+    rec = s["record"] or {}
+    if carried:
+        # its record as signed off
+        r = bk.dir / RECORD
+        rec = tomllib.loads(r.read_text(encoding="utf-8")) if r.exists() else rec
+    t = s["tag"]
+    return {
+        "book": s["slug"], "folder": s["dir"].name,
+        "title": e.get("title", s["dir"].name), "author": e.get("author", ""),
+        "version": t["version"], "summary": rec.get("summary", ""),
+        "signed_off": {"tag": t["tag"], "commit": t["commit"], "date": t["date"],
+                       "signer": t["signer"], "note": t["note"],
+                       "signature_verified": s["signed"]},
+        "carried": carried,
+        "template": template_version(bk),
+        "sources": rec.get("source", []), "witnesses": rec.get("witness", []),
+        "coverage": coverage.coverage(bk.tei),
+        "files": files}
+
+
 def cmd_make(a):
     if not shutil.which("epubcheck"):
         sys.exit("a release needs epubcheck installed")
@@ -670,13 +720,20 @@ def cmd_make(a):
     states = [state(d) for d in candidates()]
     signed = [s for s in states if s.get("tag")]
     done = [s for s in signed if s["done"] or (a.trial and s["holds"])]
+    # a book changed since its sign-off goes out as it was signed off: built
+    # from its tag, its folder in `stable` as tagged
+    carried = [s for s in signed if s not in done and s["changed"] and
+               not s["problems"] and (s["signed"] or a.trial)]
     for s in signed:
-        if s not in done:
+        if s in carried:
+            print(f"carried: {s['slug']} at {s['tag']['tag']} "
+                  f"({len(s['changed'])} file(s) changed since; not signed off again)")
+        elif s not in done:
             why = (f"{len(s['changed'])} file(s) changed since {s['tag']['tag']}"
                    if s["changed"] else "; ".join(s["problems"]) or s["signature"])
             print(f"held back: {s['slug']} ({why})")
-    if not done:
-        sys.exit("no book is signed off and unchanged: nothing to release")
+    if not done and not carried:
+        sys.exit("no book is signed off: nothing to release")
     if root.exists():
         shutil.rmtree(root)
     root.mkdir(parents=True)
@@ -710,21 +767,36 @@ def cmd_make(a):
                 shutil.copy2(f, dest)
                 files.append({"name": dest.name, "bytes": dest.stat().st_size,
                               "sha256": sha256(dest)})
-        bk = fgb.Book(d)
-        e = bk.cfg.get("EPUB", {})
-        rec = s["record"]
-        t = s["tag"]
-        entries.append({
-            "book": s["slug"], "folder": d.name,
-            "title": e.get("title", d.name), "author": e.get("author", ""),
-            "version": t["version"], "summary": rec.get("summary", ""),
-            "signed_off": {"tag": t["tag"], "commit": t["commit"], "date": t["date"],
-                           "signer": t["signer"], "note": t["note"],
-                           "signature_verified": s["signed"]},
-            "template": template_version(bk),
-            "sources": rec.get("source", []), "witnesses": rec.get("witness", []),
-            "coverage": coverage.coverage(bk.tei),
-            "files": files})
+        entries.append(entry(s, fgb.Book(d), files))
+    for s in carried:
+        print(f"\n== {s['slug']} {s['tag']['version']} (carried, from its tag)")
+        version = printed = s["tag"]["version"]
+        if is_point(version):
+            printed = print_version(version)
+        name = lambda f, d=s["dir"], v=version, pv=printed: asset_name(
+            d, v if Path(f).suffix in (".epub", ".html") else pv, Path(f))
+        with tempfile.TemporaryDirectory(prefix="fgb-release-") as tmp:
+            def finish(bk, built, s=s, tmp=tmp, name=name, version=version,
+                       printed=printed):
+                if is_point(version):
+                    built = [f for f in built if f.suffix == ".epub"] + \
+                        print_at(f"{s['slug']}/{printed}", Path(tmp) / "print")
+                built += fgb.build_web(bk, Path(tmp), built, link=name)
+                files = []
+                for f in built:
+                    dest = root / name(f)
+                    shutil.copy2(f, dest)
+                    files.append({"name": dest.name, "bytes": dest.stat().st_size,
+                                  "sha256": sha256(dest)})
+                return entry(s, bk, files, carried=True)
+            try:
+                _, e = build_at(s["tag"]["tag"], Path(tmp) / "book", epub=True,
+                                then=finish)
+            except SystemExit as err:
+                print(f"  failed to build from its tag: {err}")
+                failed.append(s["slug"])
+                continue
+        entries.append(e)
     if failed:
         sys.exit(f"\nno release: {', '.join(failed)} failed a gate (above). A signed-off "
                  "book that no longer passes needs fixing and a new sign-off.")
@@ -734,10 +806,11 @@ def cmd_make(a):
     sums = [f"{sha256(f)}  {f.name}" for f in sorted(root.iterdir()) if f.is_file()]
     (root / "SHA256SUMS").write_text("\n".join(sums) + "\n", encoding="utf-8")
     extra = [] if a.trial else [(REVISIONS.relative_to(REPO).as_posix(),
-                                  record_release(rid, done))]
-    commit, new = stable_commit(rid, done, md, js, branch, extra)
+                                  record_release(rid, done + carried))]
+    commit, new = stable_commit(rid, done, md, js, branch, extra, carried)
     rel = root.relative_to(REPO) if root.is_relative_to(REPO) else root
-    print(f"\nrelease {rid}: {len(done)} book(s) in {rel}")
+    print(f"\nrelease {rid}: {len(done) + len(carried)} book(s) in {rel}"
+          + (f", {len(carried)} carried at their sign-off" if carried else ""))
     for e in entries:
         print(f"  {e['book']} {e['version']}: {len(e['files'])} file(s)")
     print(f"`{branch}`: {'new commit' if new else 'unchanged at'} {commit[:12]}")
