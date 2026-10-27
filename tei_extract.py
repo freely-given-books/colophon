@@ -320,13 +320,14 @@ class R:
         if args:
             lines += [ind + "#[", ind + f"#set enum({', '.join(args)})"]
         # a diagram (list/@rend="diagram", DIAGRAM_LISTS: a genealogy printed
-        # as a tree) is set whole, like an illustration, never across pages
+        # as a tree) is one scope labelled <diagram>, which the template
+        # draws as a tree, whole, never across pages (fgbooks 0.14.0)
         diagram = (self.layer == "reg" and depth == 0 and not numbered and
                    lst.get("rend") == "diagram")
         # diagram lists with nothing between them (two trees printed side
         # by side) are one illustration, in one scope
         if diagram and not joined_diagram(lst.getprevious(), lst):
-            lines += ["#[", "#show: block.with(breakable: false)"]
+            lines += ["#["]
         for item in items:
             body = etree.Element("item-body")
             body.text = item.text
@@ -407,7 +408,9 @@ class R:
                     lines += [ind + "  " + t, ""]
                 else:
                     lines += [block_start_escape(t), ""]
-        if args or (diagram and not joined_diagram(lst, lst.getnext())):
+        if diagram and not joined_diagram(lst, lst.getnext()):
+            lines.append(ind + "] <diagram>")
+        elif args:
             lines.append(ind + "]")
         return lines
 
