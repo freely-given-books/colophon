@@ -49,6 +49,37 @@ def esc(s):
     return ESC_RE.sub(r"\\\1", s)
 
 
+# Inline elements an lb can sit inside without leaving its block; a reading
+# (orig/reg, abbr/expan, sic/corr) is one of a choice's alternatives, so its
+# siblings are not text that follows it.
+LB_INLINE = {"hi", "seg", "q", "foreign", "emph", "ref", "name", "persName",
+             "placeName", "title", "said", "choice", "supplied"}
+LB_READING = {"orig", "reg", "abbr", "expan", "sic", "corr"}
+LB_EMPTY = {"lb", "pb", "milestone", "fw", "anchor"}
+
+
+def trailing_lb(lb):
+    """True when nothing but space follows this lb in its block (CCEL's
+    <br/> before </p>): a line break there ends no line, and in Typst it
+    would escape the closing bracket of #quote[...] ("thee. \\]")."""
+    if (lb.tail or "").strip():
+        return False
+    x = lb
+    while True:
+        if local(x) not in LB_READING:
+            for sib in x.itersiblings():
+                if isinstance(sib.tag, str) and local(sib) not in LB_EMPTY:
+                    return False
+                if (sib.tail or "").strip():
+                    return False
+        p = x.getparent()
+        if p is None or local(p) not in LB_INLINE | LB_READING:
+            return True
+        if local(p) not in LB_READING and (p.tail or "").strip():
+            return False
+        x = p
+
+
 def block_start_escape(s, numerals=True):
     """Typst treats '1. ', '- ', '+ ', '= ' and '//' at the start of a
     block as markup; escape them. numerals=False leaves '3. ' alone, so a
@@ -214,7 +245,7 @@ class R:
             trail = inner[len(inner.rstrip()):]
             return f"{lead}{self.smallcaps(inner.strip())}{trail}"
         if n == "lb" and getattr(self, "settings", {}).get("VERSE_LINEBREAKS"):
-            return self.linebreak()
+            return "" if trailing_lb(c) else self.linebreak()
         if n in ("pb", "lb", "milestone", "fw"):
             return ""
         if n == "table" and self.layer == "reg":
