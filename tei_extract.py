@@ -239,6 +239,8 @@ class R:
             return self.esc(ex.text or "") if ex is not None else ""
         if n == "seg" and c.get("rend") == "smallcaps":
             inner = self.inline(c, in_numbered)
+            if c.get("ana") == "#edition-only" and self.layer == "orig":
+                return inner                 # this edition's small capitals
             if not inner.strip():
                 return inner
             lead = inner[:len(inner) - len(inner.lstrip())]
