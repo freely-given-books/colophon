@@ -23,6 +23,12 @@ again. Books move on one at a time; none drops out of a release for it.
   ./fgb release sign BOOK --point
                                  a point version, vN.1, vN.2, ...: an
                                  improved edition between Lulu revisions
+  ./fgb release ready BOOK       the editor calls BOOK ready to sign as it
+                                 stands (the signing waits for its Lulu
+                                 revision): books/publishing.toml records the
+                                 date and commit, and status shows it, or
+                                 that the book has changed since; --clear
+                                 takes it back
   ./fgb release make             a release of every done book: the gates,
                                  then dist/release/<date>/ (PDFs, EPUBs,
                                  covers, reader and comparison pages,
@@ -287,6 +293,58 @@ def candidates():
             if (d / RECORD).exists() or book_tags(d)]
 
 
+PUBLISHING = REPO / "books" / "publishing.toml"
+
+
+def ready_of(d):
+    """{"date", "commit"} when the editor has called the book ready to sign."""
+    if not PUBLISHING.exists():
+        return None
+    r = tomllib.loads(PUBLISHING.read_text(encoding="utf-8")).get(slug(d), {}).get("ready")
+    return r if isinstance(r, dict) and r.get("commit") else None
+
+
+def ready_note(d):
+    r = ready_of(d)
+    if not r:
+        return ""
+    same = git("diff", "--quiet", r["commit"], "--", str(d.relative_to(REPO)),
+               check=False).returncode == 0
+    return (f"; ready to sign since {r['date']} ({r['commit']})" if same else
+            f"; called ready {r['date']} ({r['commit']}), but changed since")
+
+
+def cmd_ready(a):
+    """Record (or with --clear take back) the editor's "ready to sign"."""
+    d = fgb.find_book(a.book)
+    key = slug(d)
+    if not a.clear and git("status", "--porcelain", "--", str(d.relative_to(REPO))).stdout.strip():
+        sys.exit(f"{key}: uncommitted changes in its folder; commit them first, so "
+                 "\"ready\" names the book as it stands")
+    head = f'["{key}"]'
+    lines = PUBLISHING.read_text(encoding="utf-8").split("\n") if PUBLISHING.exists() else []
+    if head not in lines:
+        if a.clear:
+            print(f"{key}: not marked ready")
+            return 0
+        lines += ["", head]
+    i = lines.index(head) + 1
+    while i < len(lines) and not lines[i].startswith("["):
+        if lines[i].startswith("ready ="):
+            del lines[i]
+            continue
+        i += 1
+    if not a.clear:
+        commit = git("rev-parse", "--short", "HEAD").stdout.strip()
+        lines.insert(lines.index(head) + 1, f'ready = {{ date = "{datetime.date.today()}", '
+                     f'commit = "{commit}" }}')
+    PUBLISHING.write_text("\n".join(lines).rstrip("\n") + "\n", encoding="utf-8")
+    print(f"{key}: " + ("no longer marked ready" if a.clear else
+                        f"ready to sign, as it stands at {commit}") +
+          f" ({PUBLISHING.relative_to(REPO)}; commit it)")
+    return 0
+
+
 def cmd_status(a):
     books = candidates()
     if not books:
@@ -308,6 +366,8 @@ def cmd_status(a):
             what = f"held back {t['version']}: " + "; ".join(s["problems"])
         else:
             what = "not signed off"
+        if not s["done"]:
+            what += ready_note(d)
         print(f"  {s['slug']:58} {what}")
         for f in s.get("changed", [])[:8]:
             print(f"      changed: {f}")
@@ -834,5 +894,5 @@ def main(a):
         except packages.PackageError as e:
             sys.exit(f"fgb: {e}")
     fn = {"status": cmd_status, "record": cmd_record, "sign": cmd_sign,
-          "make": cmd_make}[a.action]
+          "make": cmd_make, "ready": cmd_ready}[a.action]
     sys.exit(fn(a) or 0)

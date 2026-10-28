@@ -46,6 +46,7 @@ TYPES = [  # (class, label, shown by default)
     ("t-spelling", "spelling", True),
     ("t-case", "capitals", True),
     ("t-punctuation", "punctuation", True),
+    ("t-reference", "scripture references", True),
     ("t-spacing", "spacing", False),
     ("t-abbr", "abbreviations", False),
     ("t-supplied", "supplied letters", True),

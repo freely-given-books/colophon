@@ -653,8 +653,9 @@ def epigraph_lines(r, ep):
 
 
 # a printed paragraph the edition sets as an epigraph (p[@rend="epigraph"]):
-# its reference ("EPHES. 6. 7.") is split off its verse
-EPIGRAPH_REF = re.compile(r"^((?:[1-3] )?[A-Z][A-Za-z]*\.\s*\d+\.(?:\s*\d+(?:,\s*\d+)*\.)?)\s+(.*)$", re.S)
+# its reference ("EPHES. 6. 7.", in the modern style "Eph 6:7.") is split off its verse
+EPIGRAPH_REF = re.compile(r"^((?:[1-3] )?[A-Z][A-Za-z]*(?:\.\s*\d+\.(?:\s*\d+(?:,\s*\d+)*\.)?"
+                          r"| \d+:\d+(?:[-–,]\s*\d+)*\.?))\s+(.*)$", re.S)
 
 
 # or a reference the edition gives after it ("... openly. — Matthew 6:6")

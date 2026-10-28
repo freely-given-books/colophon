@@ -32,6 +32,8 @@ from pathlib import PurePosixPath
 
 from lxml import etree
 
+import refstyle
+
 EPUB_NS = "http://www.idpf.org/2007/ops"
 BLOCKS = {"p", "h1", "h2", "h3", "h4", "h5", "h6", "li", "dt", "dd", "td", "th",
           "figcaption", "pre", "blockquote", "div", "section", "aside", "header",
@@ -49,6 +51,7 @@ KINDS = [  # (class, label, shown by default)
     ("punct", "punctuation", True),
     ("quotes", "quotation marks and dashes", False),
     ("spacing", "spacing", False),
+    ("refs", "scripture references", True),
     ("para", "paragraph breaks", True),
 ]
 
@@ -254,6 +257,8 @@ def classify(a, b):
     wa, wb = [x for x in ka if is_word(x)], [x for x in kb if is_word(x)]
     if not wa and not wb:
         return "punct"
+    if refstyle.restyled(" ".join(ka), " ".join(kb)):
+        return "refs"                         # Heb. xii. 5 / Heb 12:5
     if [x.lower() for x in wa] == [x.lower() for x in wb]:
         if wa == wb:
             return "punct"
@@ -519,7 +524,7 @@ font:600 12px system-ui,sans-serif;color:var(--muted);text-transform:uppercase;l
 .ch.wording{box-shadow:inset 0 -2px var(--wording)}
 .ch.spelling{box-shadow:inset 0 -2px var(--spelling)}
 .ch.case{box-shadow:inset 0 -2px var(--case)}
-.ch.punct{box-shadow:inset 0 -2px var(--punct)}
+.ch.punct,.ch.refs{box-shadow:inset 0 -2px var(--punct)}
 .ch.quotes,.ch.spacing{box-shadow:inset 0 -2px var(--quotes)}
 .ch.para{box-shadow:inset 0 -2px var(--para)}
 body.only .row.same{display:none}

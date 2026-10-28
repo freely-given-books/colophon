@@ -56,8 +56,10 @@ overrides), so the ebook and the Typst chapters cannot drift apart.
   - `<head type="edition">` this edition's section title, printed head kept;
     `<head type="short">` its running-head form
   - `reg/@type`: spelling, case, punctuation, spacing, grammar (archaic
-    forms modernized: thou, hath, -eth), emendation (another word, a word
-    added or removed, a changed number; "wording" in `tei_review.py`); a `reg`
+    forms modernized: thou, hath, -eth), reference (a scripture reference
+    restyled, "Heb. xii. 5" → "Heb 12:5", the same book and numbers:
+    `refstyle.mark_readings` types the editor's readings inside one),
+    emendation (another word, a word added or removed, a changed number; "wording" in `tei_review.py`); a `reg`
     may hold `<hi>` (italic words of the reading) and `<anchor>`s
   - notes: `note/@target` → `<anchor>` where the edition moved the note
     (it stays where it was printed for the orig layer);
@@ -262,6 +264,10 @@ $PY colophon/slips.py source/<book>.tei.xml witness.pdf   # or .epub, .txt, a .t
 $PY colophon/sweep.py books/<author>/<book> [--early]
 # scripture references: verses that don't exist, quotes that don't match (KJV/BSB)
 $PY colophon/refs.py books/<author>/<book> --quotes [--bible bsb]
+# scripture references in the edition's style (Heb. xii. 5 -> Heb 12:5, the
+# book spelled out where the sentence reads it: "in Romans 8:28"; ver. -> v.)
+# in chapters/typ, then ./fgb sync: the readings become reg[@type="reference"]
+$PY colophon/refstyle.py books/<author>/<book> --write [--report FILE]
 
 # end-to-end check: rebuild matches committed TEI, round trips, compile
 $PY colophon/verify.py books/william-perkins/christian-economy
