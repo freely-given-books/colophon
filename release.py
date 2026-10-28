@@ -327,6 +327,8 @@ def cmd_ready(a):
         if a.clear:
             print(f"{key}: not marked ready")
             return 0
+        while lines and not lines[-1].strip():
+            lines.pop()
         lines += ["", head]
     i = lines.index(head) + 1
     while i < len(lines) and not lines[i].startswith("["):
