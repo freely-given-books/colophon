@@ -1104,13 +1104,25 @@ def punct_after_deletion(ops, src):
     return [o for o in out if o is not None]
 
 
+GREEK = re.compile(r"[\u0370-\u03ff\u1f00-\u1fff]")
+
+
+def align_key(w):
+    """A Greek word without its accents and breathings, so that a review
+    correcting them (Ὀλικῶς to Ὁλικῶς) still lines up with the word as
+    printed; the matched word takes the review's form all the same."""
+    if not GREEK.search(w):
+        return w
+    return "".join(c for c in unicodedata.normalize("NFD", w) if not unicodedata.combining(c))
+
+
 def align(src, tgt, report, label, owner=None):
     """src: stream entries; tgt: [(text, kind)]. Returns (clusters,
     structure_ops). Each cluster: (list of Tok in order, target text list,
     target indices). If `owner` is a dict it is filled with
     target index -> source Tok that received that target word."""
-    a = [s[0] for s in src]
-    b = [t[0] for t in tgt]
+    a = [align_key(s[0]) for s in src]
+    b = [align_key(t[0]) for t in tgt]
     sm = difflib.SequenceMatcher(None, a, b, autojunk=False)
     uf = UF()
     tok_order = []
