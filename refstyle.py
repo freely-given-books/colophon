@@ -90,6 +90,11 @@ REF_RE = re.compile(
     rf"(?:(?P<sep>\s?[.:,]\s?|\.?\s(?:ver|vers|v)\.\s?)(?P<vs>{VLIST}|ult(?=\.)))?"
     rf"(?P<more>(?:\s?;\s?(?:{NUM}|{ROMAN})(?:\s?[.:]\s?)(?:{VLIST}))*)"
     rf"(?P<end>\.?)(?!\w|:\w)")
+MODERN_BOOK = "|".join(re.escape(n) for n in sorted(set(ABBR.values()) | set(refs.BOOKS)
+                                                   | {"Psalm"}, key=len, reverse=True))
+CHAIN_RE = re.compile(
+    rf"(?P<pre>(?<![\w.])(?P<book>{MODERN_BOOK}) \d{{1,3}}:\d{{1,3}}(?:(?:[–,]\s?|;\s\d{{1,3}}:)\d{{1,3}})*)"
+    rf"(?P<sep>,| and|, and) (?P<ch>(?!v\.)[ivxlc]{{1,7}})\. ?(?P<vs>{VLIST})(?![\w:])")
 CLOSE_RE = re.compile(rf"(\s)((?:{NAMES_RE})\.?)\](\s?(?:{NUM}|{ROMAN})\s?[.:,]\s?{NUM})")
 PARTIAL_RE = re.compile(
     rf"(?<![\w.])(?P<w>ver|vers|v|Ver|Vers|V|chap|Chap|ch|Ch)\.\s?(?P<a>{NUM}|{ROMAN})"
@@ -233,6 +238,19 @@ class Converter:
             self.log.append((where, kind, m.group(0), new))
         return new
 
+    def chain(self, m, where):
+        canon = canon_of(m.group("book"))
+        ch = m.group("ch")
+        if ch == "v" or not re.fullmatch(r"c{0,3}(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})", ch):
+            return m.group(0)          # "vv. 1", "v. 3": verses, not a chapter
+        c = refs.roman(ch)
+        vs = norm_verses(m.group("vs"))
+        if not canon or not self.valid(canon, c, vs):
+            return m.group(0)
+        new = m.group("pre") + (" and " if "and" in m.group("sep") else "; ") + f"{c}:{vs}"
+        self.log.append((where, "citation", m.group(0), new))
+        return new
+
     def partial(self, m, line, where):
         w, a, b = m.group("w"), m.group("a"), m.group("b")
         verse = w.lower().startswith("v")
@@ -265,6 +283,13 @@ class Converter:
         # "#emph[... his people, Deut.] 6. 7": the italic closes before the book
         text = CLOSE_RE.sub(r"]\1\2\3", text)
         text = REF_RE.sub(lambda m: self.ref(m, text, where), text)
+        # a list going on in the same book with a chapter in Roman numerals
+        # ("Ezek 11:19, xxxvi. 26") -> "Ezek 11:19; 36:26"
+        while True:
+            new = CHAIN_RE.sub(lambda m: self.chain(m, where), text)
+            if new == text:
+                break
+            text = new
         return PARTIAL_RE.sub(lambda m: self.partial(m, text, where), text)
 
 
