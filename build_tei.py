@@ -42,6 +42,7 @@ from teitok import NS, T, Tok, local, tokenize, iter_stream  # noqa: E402
 from spelling import (modernize_word_lower, apply_case_pattern, AMBIGUOUS_NAMES,  # noqa: E402
                       GRAMMAR_EXCEPTIONS)
 import reviewparse  # noqa: E402
+import refstyle  # noqa: E402
 import layout  # noqa: E402
 import sources  # noqa: E402
 
@@ -3109,8 +3110,9 @@ def add_header(root, editor_name):
         "choice/orig holds the text as printed; choice/reg holds the modern "
         "reading. reg/@resp says who decided it (#auto = machine, #editor = "
         "reviewed by hand); reg/@type is spelling, case, punctuation, spacing, "
-        "grammar (an archaic form modernized: thou, hath, -eth) or emendation "
-        "(another word, or a word added or removed). "
+        "grammar (an archaic form modernized: thou, hath, -eth), reference (a "
+        "scripture reference in the modern style: Heb. xii. 5 as Heb 12:5) or "
+        "emendation (another word, or a word added or removed). "
         "Where the editor overrode the machine, the editor's reg comes first and "
         "the machine's proposal follows as a second reg[@resp='#auto'].",
         "choice/abbr + choice/expan: macron abbreviations (e.g. frō = from) "
@@ -3385,6 +3387,7 @@ def main():
                           cfg.get("SKIP_DIVISIONS", ()))
     smallcaps_phrases(root, SMALLCAPS_PHRASES)
     mark_diagrams(root)
+    refstyle.mark_readings(text)
     for d in divs:
         if d.extra.get("edition_head"):
             h = etree.Element(T + "head")
@@ -3460,6 +3463,7 @@ def build_layout(args, tree, root, text, toks, files, cfg=None):
                           (cfg or {}).get("SKIP_DIVISIONS", ()))
     smallcaps_phrases(root, SMALLCAPS_PHRASES)
     mark_diagrams(root)
+    refstyle.mark_readings(text)
     add_header(root, args.editor)
     write_tei(tree, args.out)
     if args.report:

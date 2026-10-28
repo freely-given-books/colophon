@@ -719,7 +719,7 @@ def main():
     p.set_defaults(fn=cmd_changes)
     p = sub.add_parser("release", help="done books and releases of them (release.py)")
     p.add_argument("action", nargs="?", default="status",
-                   choices=("status", "record", "sign", "make"))
+                   choices=("status", "record", "sign", "ready", "make"))
     p.add_argument("book", nargs="?")
     p.add_argument("version", nargs="?", help="sign: the version (default: one past the last)")
     p.add_argument("--check", action="store_true",
@@ -728,6 +728,8 @@ def main():
     p.add_argument("--point", action="store_true",
                    help="sign: a point version (vN.1, vN.2, ...), an improved edition "
                    "between Lulu revisions")
+    p.add_argument("--clear", action="store_true",
+                   help="ready: take back an earlier \"ready to sign\"")
     p.add_argument("--out", help="make: folder for the release (default: dist/release/)")
     p.add_argument("--trial", action="store_true",
                    help="make: take unverified sign-offs and an unreleased colophon; "

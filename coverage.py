@@ -12,9 +12,9 @@ table of contents, an advertisement) are left out of every count. A gap the
 TCP marks as a duplicate (text printed twice) is not missing text, and a
 gap in a printed note the edition leaves out is not counted.
 A <choice> counts once, under its effective reading (the editor's when there
-is one, else the machine's); form = spelling, case, punctuation, spacing and
-expanded abbreviations; grammar = archaic forms modernized; wording =
-emendations (another word, a word added or removed, a changed number).
+is one, else the machine's); form = spelling, case, punctuation, spacing,
+scripture references restyled and expanded abbreviations; grammar = archaic
+forms modernized; wording = emendations (another word, a word added or removed, a changed number).
 """
 
 import re
@@ -25,7 +25,7 @@ from lxml import etree
 
 T = "{http://www.tei-c.org/ns/1.0}"
 WORD = re.compile(r"\w+(?:['’]\w+)*")
-FORM = {"spelling", "case", "punctuation", "spacing"}
+FORM = {"spelling", "case", "punctuation", "spacing", "reference"}
 
 
 def words(s):
