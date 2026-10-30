@@ -603,7 +603,7 @@ def mark_readings(text_el):
             orig = "".join(p if isinstance(p, str) else p[1] for p, _, _ in spans[k0:k1 + 1])
             reg = "".join(p if isinstance(p, str) else p[2] for p, _, _ in spans[k0:k1 + 1])
             # without the book's name ("And 40:4, 5") a reading holds a number
-            if m.group(0)[0].isdigit() and not re.search(r"\d|\b[ivxlc]+\b", orig):
+            if re.match(r"\d{1,3}:", m.group(0)) and not re.search(r"\d|\b[ivxlc]+\b", orig):
                 continue
             # the book's name may lie outside the readings ("1 Tim. 3. 1.")
             head = reg_text[m.start():spans[k0][1]]
