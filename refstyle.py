@@ -434,7 +434,9 @@ MODERN_RE = re.compile(
     r"|(?:vv?|ch)\.\s\d{1,3}|(?:Verses?|Chapter)\s\d{1,3}"
     # a reference going on in the same book: "And xl. 4, 5" -> "And 40:4, 5" (Boston)
     r"|(?<![\d:.,])\d{1,3}(?=:\d))"
-    r"(?::\d{1,3})?(?:[–,]\s?\d{1,3})*(?:;\s\d{1,3}(?::\d{1,3})?(?:[–,]\s?\d{1,3})*)*\.?")
+    # a list goes on in the same book, not into a numbered one ("; 1 Cor 5:4")
+    r"(?::\d{1,3})?(?:[–,]\s?\d{1,3}(?!\s[A-Z]))*"
+    r"(?:;\s\d{1,3}(?!\s[A-Z])(?::\d{1,3})?(?:[–,]\s?\d{1,3}(?!\s[A-Z]))*)*\.?")
 TEXT_BLOCKS = {"p", "item", "note", "head", "cell", "l", "label", "trailer", "signed",
                "salute", "dateline", "byline", "titlePart", "docTitle", "q", "quote", "bibl"}
 
