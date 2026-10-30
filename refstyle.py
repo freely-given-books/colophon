@@ -17,6 +17,13 @@ the TEI as reg readings (the orig layer keeps them as printed):
              28") keeps the book's name spelled out: "in Romans 8:28"
              a book's name set in italic ("#emph[Gen.] 31. 42.", Gouge) is set
              roman with the rest
+  lists      numbers after the chapter read against the KJV: verses, or a
+             chapter going on ("Gen. 2. 22, 1. 27" -> "Gen 2:22; 1:27", "Job 22.
+             3. & 35. 7." -> "Job 22:3; 35:7"); with --stops, verses set off by
+             stops too ("Eph. 6. 5. 6. 7." -> "Eph 6:5, 6, 7", Perkins, Gouge,
+             Brooks), a margin note's numbered head left out ("Luke 16. 19. 2.
+             In bringing"); readings that could go either way are reported
+             "ambiguous", a verse out of order "check"
   partial    "ver. 5", "vers. 5, 6", "chap. 14. 31" -> "v. 5", "vv. 5, 6",
              "ch. 14:31" ("Ver." / "Chap." opening a sentence: "Verse",
              "Chapter"); "verse 5" written out and Latin "cap." are kept
@@ -54,12 +61,8 @@ WORDLIKE = {"is", "am", "ho", "so", "da", "ge", "le", "ex", "nu", "lu", "joe", "
             "jon", "hag", "oba", "lam", "dan", "job", "mark", "acts", "john", "jude",
             "ruth", "ezra", "joel", "amos", "jonah", "luke", "titus"}
 
-ROMAN = r"(?:[ivxlc]{1,7}|[IVXLC]{1,7})"
+ROMAN = r"(?:[ivxlc]{1,9}|[IVXLC]{1,9})"
 NUM = r"\d{1,3}"
-# a number in a list is a verse unless a book's name follows it ("2 Cor 5:14,
-# 15, 1 Tim. ii. 6": the 1 is the next book's)
-VLIST = (rf"{NUM}(?:\s?[-–]\s?{NUM})?(?:(?:\s?,\s?|\s(?:and|&)\s){NUM}"
-         rf"(?![\s.]*(?:#emph\[)?[A-Z][a-z])(?:\s?[-–]\s?{NUM})?)*")
 
 
 def name_alternatives():
@@ -80,22 +83,47 @@ NAMES_RE = "|".join(re.escape(n) for n in name_alternatives()).replace(r"\ ", r"
 BARE_RE = "|".join(sorted({re.escape(n.split(" ", 1)[1][:1].upper() + n.split(" ", 1)[1][1:])
                            for n in refs.NAMES if re.match(r"[123] [a-z]", n)},
                           key=len, reverse=True)).replace(r"\ ", r"\s?")
-# an italic may hold the book's name ("#emph[Gen.] 31. 42", Gouge) or the whole
-# reference ("2 #emph[Cor. 12. 7.]"): the reference comes out roman
-REF_RE = re.compile(
-    rf"(?<![\w.])(?:(?P<num>[123])\.?\s(?P<nopen>#emph\[)?(?P<bare>{BARE_RE})"
-    rf"|(?P<open>#emph\[(?P<paren>\()?)?(?P<book>{NAMES_RE}))(?P<stop>\.?)"
-    rf"(?(open)(?P<c1>\])?|(?(nopen)(?P<c2>\])?))\s?"
-    rf"(?P<ch>{NUM}|{ROMAN})"
-    rf"(?:(?P<sep>\s?[.:,]\s?|\.?\s(?:ver|vers|v)\.\s?)(?P<vs>{VLIST}|ult(?=\.)))?"
-    rf"(?P<more>(?:\s?;\s?(?:{NUM}|{ROMAN})(?:\s?[.:]\s?)(?:{VLIST}))*)"
-    rf"(?P<end>\.?)(?!\w|:\w)")
+# a number in a list is a verse unless a book's name follows it ("2 Cor 5:14,
+# 15, 1 Tim. ii. 6": the 1 is the next book's)
+NEXT_BOOK = rf"(?![123](?:\\?\.)?\s?(?:#emph\[)?(?:{BARE_RE})\b)"
+VLIST = (rf"{NUM}(?:\s?[-–]\s?{NUM})?(?:(?:\s?,\s?|\s(?:and|&)\s){NEXT_BOOK}{NUM}"
+         rf"(?![\d:])(?:\s?[-–]\s?{NUM})?)*")
+# after the chapter, numbers set off by commas or "and": verses, or a chapter
+# and its verse ("Gen. 2. 22, 1. 27", "Isa. 10. 17. and 27. 4."); in a book
+# that sets verses off by stops too (--stops: Perkins's "Eph. 6. 5. 6. 7.") a
+# stop may part them, which elsewhere ends the reference (Owen's "Matt.
+# xxvi. 28. 2. Do those"). Converter.tail reads them against the KJV. An
+# italic holding the reference may close inside the list ("#emph[Gen. 26. 35.
+# &] 27. 46."); a number that a book's name follows is the next reference's
+CLOSE_IN = r"(?(c1)|(?(c2)|(?(open)\]?|(?(nopen)\]?))))"
+ONE = rf"{NUM}(?![\d#a-z]|:\d)(?:\s?[-–]\s?{NUM}|\.?\s(?:ad\s)?ult(?=\.))?"
+
+
+def ref_re(stops):
+    if stops:
+        item = rf"(?:\s?,|\.(?:\s?(?:and|&))?|\s(?:and|&)){CLOSE_IN}\s?{NEXT_BOOK}{ONE}"
+    else:
+        item = (rf"(?:(?:\s?,|\s(?:and|&)){CLOSE_IN}\s?{NEXT_BOOK}{ONE}"
+                rf"|\.?\s?(?:and|&){CLOSE_IN}\s?{NUM}\.\s?{ONE})")
+    # an italic may hold the book's name ("#emph[Gen.] 31. 42", Gouge) or the
+    # whole reference ("2 #emph[Cor. 12. 7.]"): the reference comes out roman
+    return re.compile(
+        rf"(?<![\w.])(?:(?P<num>[123])(?:\\?\.)?\s(?P<nopen>#emph\[)?(?P<bare>{BARE_RE})"
+        rf"|(?P<open>#emph\[(?P<paren>\()?)?(?P<book>{NAMES_RE}))(?P<stop>\.?)"
+        rf"(?(open)(?P<c1>\])?|(?(nopen)(?P<c2>\])?))\s?"
+        rf"(?P<ch>{NUM}|{ROMAN})"
+        rf"(?:(?P<sep>\s?[.:,]\s?|\.?\s(?:ver|vers|v)\.\s?)(?P<vs>{ONE}(?:{item})*|ult(?=\.)))?"
+        rf"(?P<more>(?:\s?;\s?(?:{NUM}|{ROMAN})(?:\s?[.:]\s?)(?:{VLIST}))*)"
+        rf"(?P<end>\.?)(?!\w|:\w)")
+
+
+REF_RE = ref_re(False)
 MODERN_BOOK = "|".join(re.escape(n) for n in sorted(set(ABBR.values()) | set(refs.BOOKS)
                                                    | {"Psalm"}, key=len, reverse=True))
 CHAIN_RE = re.compile(
     rf"(?P<pre>(?<![\w.])(?P<book>{MODERN_BOOK}) \d{{1,3}}:\d{{1,3}}(?:(?:[–,]\s?|;\s\d{{1,3}}:)\d{{1,3}})*)"
-    rf"(?P<sep>,| and|, and) (?P<ch>(?!v\.)[ivxlc]{{1,7}})\. ?(?P<vs>{VLIST})(?![\w:])")
-CLOSE_RE = re.compile(rf"(\s)((?:{NAMES_RE})\.?)\](\s?(?:{NUM}|{ROMAN})\s?[.:,]\s?{NUM})")
+    rf"(?P<sep>,| and|, and) (?P<ch>(?!v\.)[ivxlc]{{1,9}})\. ?(?P<vs>{VLIST})(?![\w:])")
+CLOSE_RE = re.compile(rf"([\s(])((?:[123]\\?\.?\s?(?:{BARE_RE})|{NAMES_RE})\.?)\](\s?(?:{NUM}|{ROMAN})\s?[.:,]\s?{NUM})")
 PARTIAL_RE = re.compile(
     rf"(?<![\w.])(?P<w>ver|vers|v|Ver|Vers|V|chap|Chap|ch|Ch)\.\s?(?P<a>{NUM}|{ROMAN})"
     rf"(?:(?P<sep>\s?[.:]\s?)(?P<b>{VLIST}))?(?P<rest>(?:\s?[-–]\s?{NUM}|\s?,\s?{NUM})*)"
@@ -142,8 +170,9 @@ def ends_sentence(after):
 
 
 class Converter:
-    def __init__(self, bible):
+    def __init__(self, bible, stops=False):
         self.bible = bible
+        self.ref_re = ref_re(stops)
         self.log = []
         self.prose_end = None
 
@@ -157,7 +186,83 @@ class Converter:
             return False
         return all(1 <= v <= len(chs[c - 1]) for v in nums)
 
+    def tail(self, canon, c, s):
+        """The numbers after chapter c, as printed ("5. 6. 7", "22, 1. 27",
+        "17 and 27. 4. and 55. 13"): the first verse's list and the chapters
+        after it ("27:4"), and a note for the report, or None when no reading
+        fits the KJV. A number may open a new chapter where a stop and its
+        verse follow; of the readings that fit, verses rising in each chapter
+        and then the fewest chapters win (Perkins's "Eph. 6. 5. 6. 7." is
+        verses, Brooks's "Hos. 4. 17. 5. 3." chapters)."""
+        chs = self.bible.get(canon, [])
+        items = []
+        for t in re.finditer(r"(?P<sep>^|\s?,|\.(?:\s?(?:and|&))?|\s(?:and|&))\]?\s?"
+                             r"(?P<a>\d+)(?:\s?[-–]\s?(?P<b>\d+)|\.?\s(?:ad\s)?(?P<ult>ult))?", s):
+            sep = t.group("sep").strip()
+            items.append((sep[:1] if sep[:1] in ".," else sep and "and", int(t.group("a")),
+                          int(t.group("b")) if t.group("b") else "ult" if t.group("ult") else None))
+        starts = [i for i in range(1, len(items) - 1)
+                  if items[i][2] is None and items[i + 1][0] == "."]
+        best = []
+        for k in range(1 << len(starts)):
+            pick = {starts[j] for j in range(len(starts)) if k >> j & 1}
+            if any(i + 1 in pick for i in pick):
+                continue
+            groups, viol, i = [[c, []]], 0, 0
+            while i < len(items):
+                if i in pick:
+                    groups.append([items[i][1], []])
+                    i += 1
+                    continue
+                groups[-1][1].append(items[i][1:])
+                i += 1
+            ok = True
+            for ch, vs in groups:
+                if not 1 <= ch <= len(chs):
+                    ok = False
+                    break
+                last = 0
+                for a, b in vs:
+                    b = len(chs[ch - 1]) if b == "ult" else b
+                    if not (1 <= a <= len(chs[ch - 1]) and (b is None or a < b <= len(chs[ch - 1]))):
+                        ok = False
+                    viol += a <= last
+                    last = b or a
+            if ok:
+                best.append((viol, len(groups) - 1, groups))
+        if not best:
+            return None
+        best.sort(key=lambda x: x[:2])
+        viol, _, groups = best[0]
+        if viol and len(items) > 2:
+            return None
+        note = "check" if viol else \
+            "ambiguous" if any(v == 0 and g != groups for v, _, g in best[1:]) else None
+
+        def fmt(vs, ch):
+            return ", ".join(f"{a}–{len(chs[ch - 1]) if b == 'ult' else b}" if b else str(a)
+                             for a, b in vs)
+        return fmt(groups[0][1], c), [f"{ch}:{fmt(vs, ch)}" for ch, vs in groups[1:]], note
+
     def ref(self, m, line, where):
+        """The reference restyled; a list after the chapter that no reading
+        fits, or that ends in a numbered point ("Luke 16:19. 2. In bringing",
+        Gouge), is cut back to the part that reads."""
+        out = self.restyle(m, line, where)
+        if out is not None:
+            return out
+        vs0 = m.start("vs")
+        for cut in reversed([vs0 + c.start() for c in
+                             re.finditer(r"(?:\.|,?\s?(?:and|&)|\s?,)\]?\s?\d", m.group("vs"))]):
+            m2 = self.ref_re.match(line, m.start(), cut)
+            if m2 and m2.end() == cut and m2.group("vs"):
+                out = self.restyle(m2, line, where)
+                if out is not None:
+                    return out + line[cut:m.end()]
+        self.log.append((where, "missing", m.group(0), ""))
+        return m.group(0)
+
+    def restyle(self, m, line, where):
         book, ch = m.group("book") or f"{m.group('num')} {m.group('bare')}", m.group("ch")
         canon = canon_of(book)
         if not canon:
@@ -184,6 +289,23 @@ class Converter:
             if not 1 <= c <= len(chs):
                 return m.group(0)
             vs = str(len(chs[c - 1]))
+        extra, note = [], None
+        closed = "]" in vs                 # the italic closed inside the list
+        if closed and vs.count("]") > 1:
+            return m.group(0)
+        if re.search(r"\.|\]|&|\band\b|\bult\b", vs) and canon not in ONE_CHAPTER:
+            read = self.tail(canon, c, vs)
+            # a margin note's numbered head after the reference, not a verse
+            # out of order: "#footnote[Luke 16. 19. 2. In bringing parents"
+            # (Gouge); "Gen. 24. 2. 3. And prayed" (Perkins) is verses
+            after = line[m.end("vs"):]
+            if re.search(r"\.\]?\s?\d+$", vs) and re.match(r"\.\s(?:#emph\[)?[A-Z]", after) \
+                    and not re.match(rf"\.\s(?:#emph\[)?(?:{NAMES_RE})\b", after) \
+                    and (not read or read[2] == "check"):
+                return None
+            if not read:
+                return None
+            vs, extra, note = read
         vs = norm_verses(vs)
         sep = (m.group("sep") or "").strip()
         one = canon in ONE_CHAPTER
@@ -202,7 +324,7 @@ class Converter:
             else:
                 self.log.append((where, "missing", m.group(0), ""))
                 return m.group(0)
-        more = []
+        more = list(extra)
         for part in re.finditer(rf"({NUM}|{ROMAN})\s?[.:]\s?({VLIST})", m.group("more")):
             c2, v2 = arabic(part.group(1)), norm_verses(part.group(2))
             if not self.valid(canon, c2, v2):
@@ -210,7 +332,8 @@ class Converter:
                 return m.group(0)
             more.append(f"{c2}:{v2}")
         prose = not depth_at(line, m.start()) and \
-            (re.search(r"(\w+)\W*$", line[:m.start()]) or [None, ""])[1].lower() in PROSE_BEFORE
+            (re.search(r"(\w+)(?:\s|#emph\[|\()*$", line[:m.start()]) or [None, ""])[1].lower() \
+            in PROSE_BEFORE
         # a list the sentence reads ("as in Dan. xii. 2, Rom. v. 19") is spelled out throughout
         if self.prose_end is not None and \
                 re.fullmatch(r"\s*(?:,|;|,?\s(?:and|or))\s*", line[self.prose_end:m.start()]):
@@ -229,11 +352,12 @@ class Converter:
         end = m.group("end")
         if end and ends_sentence(line[m.end():]):
             new += "."
-        if (m.group("open") or m.group("nopen")) and not (m.group("c1") or m.group("c2")):
+        if (m.group("open") or m.group("nopen")) and not (m.group("c1") or m.group("c2")) \
+                and not closed:
             new = (m.group("open") or m.group("nopen")) + new   # the italic goes on to its "]"
         elif m.group("paren"):
             new = "(" + new              # "#emph[(Mat.] 19. 6.)"
-        kind = "prose" if prose else "citation"
+        kind = note or ("prose" if prose else "citation")
         if new != m.group(0):
             self.log.append((where, kind, m.group(0), new))
         return new
@@ -282,7 +406,12 @@ class Converter:
         self.prose_end = None
         # "#emph[... his people, Deut.] 6. 7": the italic closes before the book
         text = CLOSE_RE.sub(r"]\1\2\3", text)
-        text = REF_RE.sub(lambda m: self.ref(m, text, where), text)
+        # a numbered book's number left italic ("#emph[1] John 3:2", Gouge)
+        def roman_number(m):
+            self.log.append((where, "citation", m.group(0) + "…", m.group(1) + " …"))
+            return m.group(1) + " "
+        text = re.sub(rf"#emph\[([123])\.?\]\s?(?=(?:{BARE_RE})\.?\s?\d)", roman_number, text)
+        text = self.ref_re.sub(lambda m: self.ref(m, text, where), text)
         # a list going on in the same book with a chapter in Roman numerals
         # ("Ezek 11:19, xxxvi. 26") -> "Ezek 11:19; 36:26"
         while True:
@@ -301,7 +430,9 @@ PARTIAL_WORDS = {"v", "vv", "ver", "vers", "verse", "verses", "chap", "ch", "cha
 MODERN_NAMES = sorted(set(ABBR.values()) | set(refs.BOOKS) | {"Psalm"}, key=len, reverse=True)
 MODERN_RE = re.compile(
     r"(?<!\w)(?:(?:" + "|".join(re.escape(n) for n in MODERN_NAMES) + r")\s\d{1,3}"
-    r"|(?:vv?|ch)\.\s\d{1,3}|(?:Verses?|Chapter)\s\d{1,3})"
+    r"|(?:vv?|ch)\.\s\d{1,3}|(?:Verses?|Chapter)\s\d{1,3}"
+    # a reference going on in the same book: "And xl. 4, 5" -> "And 40:4, 5" (Boston)
+    r"|(?<![\d:.,])\d{1,3}(?=:\d))"
     r"(?::\d{1,3})?(?:[–,]\s?\d{1,3})*(?:;\s\d{1,3}(?::\d{1,3})?(?:[–,]\s?\d{1,3})*)*\.?")
 TEXT_BLOCKS = {"p", "item", "note", "head", "cell", "l", "label", "trailer", "signed",
                "salute", "dateline", "byline", "titlePart", "docTitle", "q", "quote", "bibl"}
@@ -466,9 +597,11 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("book")
     ap.add_argument("--write", action="store_true")
+    ap.add_argument("--stops", action="store_true",
+                    help='verses set off by stops ("Eph. 6. 5. 6. 7.": Perkins, Gouge, Brooks)')
     ap.add_argument("--report")
     a = ap.parse_args()
-    conv = Converter(refs.load("kjv"))
+    conv = Converter(refs.load("kjv"), a.stops)
     book = Path(a.book)
     for f in sorted((book / "chapters" / "typ").rglob("*.typ")):
         lines = f.read_text(encoding="utf-8").split("\n")
