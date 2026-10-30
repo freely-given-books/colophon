@@ -96,7 +96,7 @@ VLIST = (rf"{NUM}(?:\s?[-–]\s?{NUM})?(?:(?:\s?,\s?|\s(?:and|&)\s){NEXT_BOOK}{N
 # italic holding the reference may close inside the list ("#emph[Gen. 26. 35.
 # &] 27. 46."); a number that a book's name follows is the next reference's
 CLOSE_IN = r"(?(c1)|(?(c2)|(?(open)\]?|(?(nopen)\]?))))"
-ONE = rf"{NUM}(?![\d#a-z]|:\d)(?:\s?[-–]\s?{NUM}|\.?\s(?:ad\s)?ult(?=\.))?"
+ONE = rf"{NUM}(?![\d#]|:\d|(?!ff\b)[a-z])(?:\s?[-–]\s?{NUM}|\.?\s(?:ad\s)?ult(?=\.))?"
 
 
 def ref_re(stops):
@@ -112,7 +112,7 @@ def ref_re(stops):
         rf"|(?P<open>#emph\[(?P<paren>\()?)?(?P<book>{NAMES_RE}))(?P<stop>\.?)"
         rf"(?(open)(?P<c1>\])?|(?(nopen)(?P<c2>\])?))\s?"
         rf"(?P<ch>{NUM}|{ROMAN})"
-        rf"(?:(?P<sep>\s?[.:,]\s?|\.?\s(?:ver|vers|v)\.\s?)(?P<vs>{ONE}(?:{item})*|ult(?=\.)))?"
+        rf"(?:(?P<sep>\s?[.:,]\s?|\.?\s(?:ver|vers|v)\.\s?)(?P<vs>{ONE}(?:{item})*|ult(?=\.))(?P<ff>ff\b)?)?"
         rf"(?P<more>(?:\s?;\s?(?:{NUM}|{ROMAN})(?:\s?[.:]\s?)(?:{VLIST}))*)"
         rf"(?P<end>\.?)(?!\w|:\w)")
 
@@ -123,7 +123,7 @@ MODERN_BOOK = "|".join(re.escape(n) for n in sorted(set(ABBR.values()) | set(ref
 CHAIN_RE = re.compile(
     rf"(?P<pre>(?<![\w.])(?P<book>{MODERN_BOOK}) \d{{1,3}}:\d{{1,3}}(?:(?:[–,]\s?|;\s\d{{1,3}}:)\d{{1,3}})*)"
     rf"(?P<sep>,| and|, and) (?P<ch>(?!v\.)[ivxlc]{{1,9}})\. ?(?P<vs>{VLIST})(?![\w:])")
-CLOSE_RE = re.compile(rf"([\s(])((?:[123]\\?\.?\s?(?:{BARE_RE})|{NAMES_RE})\.?)\](\s?(?:{NUM}|{ROMAN})\s?[.:,]\s?{NUM})")
+CLOSE_RE = re.compile(rf"(\s\(?)((?:[123]\\?\.?\s?(?:{BARE_RE})|{NAMES_RE})\.?)\](\s?(?:{NUM}|{ROMAN})\s?[.:,]\s?{NUM})")
 PARTIAL_RE = re.compile(
     rf"(?<![\w.])(?P<w>ver|vers|v|Ver|Vers|V|chap|Chap|ch|Ch)\.\s?(?P<a>{NUM}|{ROMAN})"
     rf"(?:(?P<sep>\s?[.:]\s?)(?P<b>{VLIST}))?(?P<rest>(?:\s?[-–]\s?{NUM}|\s?,\s?{NUM})*)"
@@ -271,8 +271,8 @@ class Converter:
                 and not m.group("vs") and canon != "Psalms":
             return m.group(0)          # "John 3", "Job 4" with no verse: a name
         if book.lower() in WORDLIKE and len(book) <= 3 and not m.group("stop") \
-                and book != canon:
-            return m.group(0)
+                and book != canon and (m.group("sep") or "").strip() != ":":
+            return m.group(0)          # "Act 10:9", "Pro 15:3" (a modern edition's) go on
         if not m.group("vs") and not m.group("stop") and not ch.isdigit():
             return m.group(0)          # "Job ii" without a stop
         if not ch.isdigit() and not m.group("stop") and not m.group("sep"):
@@ -348,7 +348,8 @@ class Converter:
         elif chapters:
             new = f"{name} {c}, {chapters}"
         else:
-            new = f"{name} {c}" + (f":{vs}" if vs else "") + "".join(f"; {x}" for x in more)
+            new = f"{name} {c}" + (f":{vs}" if vs else "") + (m.group("ff") or "") + \
+                "".join(f"; {x}" for x in more)
         end = m.group("end")
         if end and ends_sentence(line[m.end():]):
             new += "."
@@ -581,8 +582,29 @@ def mark_readings(text_el):
             if not eds:
                 continue
             k0, k1 = min(inside), max(inside)
+            # the printed numbers may be a reading of their own, left empty,
+            # just after: "Mat" -> "Matt 26:69–75", ". ", "26. 69. ult." -> ""
+            # (Brooks); they belong to the reference
+            k = k1 + 1
+            while k < len(spans):
+                p = spans[k][0]
+                if isinstance(p, str):
+                    if not re.fullmatch(r"[\s.,;:]*", p):
+                        break
+                else:
+                    r = p[0].find("{*}reg")
+                    if r is None or r.get("resp") != "#editor" or p[2].strip() or \
+                            r.get("type") not in TYPES_TAKEN or \
+                            not re.fullmatch(r"[\s\d.,:;–-]*(?:ult\.?)?", p[1]):
+                        break
+                    k1 = k
+                    eds.append(k)
+                k += 1
             orig = "".join(p if isinstance(p, str) else p[1] for p, _, _ in spans[k0:k1 + 1])
             reg = "".join(p if isinstance(p, str) else p[2] for p, _, _ in spans[k0:k1 + 1])
+            # without the book's name ("And 40:4, 5") a reading holds a number
+            if m.group(0)[0].isdigit() and not re.search(r"\d|\b[ivxlc]+\b", orig):
+                continue
             # the book's name may lie outside the readings ("1 Tim. 3. 1.")
             head = reg_text[m.start():spans[k0][1]]
             if same_reference(head + orig, head + reg):
