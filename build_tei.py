@@ -3209,6 +3209,10 @@ def add_header(root, editor_name):
          "block or division brought in carries @change pointing at the revisionDesc "
          "entry that names the copy. The gap itself is kept, filled with an empty "
          "supplied."),
+        (".//t:seg[@type='transcription']", "seg[@type='transcription']: words the "
+         "transcription misread or left out, set as printed (read on the page image); "
+         "a comment inside gives the transcription's reading and the evidence, and "
+         "@change points at the revisionDesc entry."),
     ) if root.find(xp, {"t": NS}) is not None]
     paras += [txt for _, txt in used]
     cats = [(c, d) for c, d in (
