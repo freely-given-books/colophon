@@ -11,7 +11,8 @@ What it checks
      committed TEI (so the TEI and the reviewed chapters agree).
   2. Extracting the reg layer reproduces chapters/typ (ignoring // comment
      lines); lists any chapter that differs.
-  3. The orig layer, with gaps shown, has exactly the words of the TCP file.
+  3. The orig layer, with gaps shown, has exactly the words of the TCP file
+     (as sources.load reads it: with its supplement's pages and corrections).
   4. The TEI validates against tei_all (needs java, jing and tei_all.rng:
      --jing path/to/jing.jar --schema path/to/tei_all.rng, or both found
      in ~/.cache/fgb-tei, where the eebo-tcp-book skill puts them).
@@ -137,7 +138,7 @@ def main():
     ops = [] if wa == wb else [
         o for o in difflib.SequenceMatcher(None, wa, wb, autojunk=False).get_opcodes()
         if o[0] != "equal"]
-    print(f"[3] orig layer has the TCP words exactly: {not ops}"
+    print(f"[3] orig layer has the source words exactly: {not ops}"
           + (f" ({len(ops)} differences)" if ops else ""))
     ok &= not ops
 

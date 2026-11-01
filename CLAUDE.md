@@ -451,3 +451,14 @@ and copied back into `chapters/typ`.
    brought-in blocks carry `@change` pointing at a revisionDesc entry naming
    the copy; new sections shift a layout's ordinal section ranges
    (`edition.json`).
+17. **The TCP is not letter-perfect.** It drops words and misreads some
+   (Perkins: "Lombard," and "though" left out, "of" for "or"); collating
+   it with two OCR readings of the print, where both differ, finds them.
+   Each one, read on the
+   page image, goes in the supplement as a `<corrections>` `<fix pb before
+   tcp print after evidence/>`; `sources.load()` sets the printed words as
+   `seg[@type="transcription"]` (the TCP's reading and the evidence in a
+   comment inside), so the orig layer is the print and `verify.py` [3]
+   still compares it with the source as loaded. Not every odd TCP word is a
+   slip: Perkins' "aud" (twice) is a turned n in the print, kept in orig and
+   corrected in reg.
