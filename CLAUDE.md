@@ -456,7 +456,8 @@ and copied back into `chapters/typ`.
    it with two OCR readings of the print, where both differ, finds them.
    Each one, read on the
    page image, goes in the supplement as a `<corrections>` `<fix pb before
-   tcp print after evidence/>`; `sources.load()` sets the printed words as
+   tcp print after evidence/>` (`pb` the printed page, or the image,
+   `pb="tcp:3442:3"`, on a page the print left unnumbered); `sources.load()` sets the printed words as
    `seg[@type="transcription"]` (the TCP's reading and the evidence in a
    comment inside), so the orig layer is the print and `verify.py` [3]
    still compares it with the source as loaded. Not every odd TCP word is a
