@@ -1878,7 +1878,35 @@ def match_notes(src, tgt, s2t):
         pi, pj, k = P[i][j]
         out.append((pi if k in "ms" else None, pj if k in "mt" else None))
         i, j = pi, pj
-    return out[::-1]
+    out = out[::-1]
+    # Notes the review set in another order than printed (a reference moved
+    # past its neighbour to the words it proves) cross: the matching above
+    # cannot, and would read them as one note rewritten into another. Swap
+    # two near matches when each fits the other's note much better, and pair
+    # a dropped note with an added one when their texts agree.
+    def c(i, j):
+        return cost(i, j) if i is not None and j is not None else INF
+    changed = True
+    while changed:
+        changed = False
+        ms = [k for k, (i, j) in enumerate(out) if i is not None and j is not None]
+        for x in range(len(ms)):
+            for y in range(x + 1, min(x + 6, len(ms))):
+                (i1, j1), (i2, j2) = out[ms[x]], out[ms[y]]
+                if c(i1, j2) + c(i2, j1) < c(i1, j1) + c(i2, j2) - 0.1:
+                    out[ms[x]], out[ms[y]] = (i1, j2), (i2, j1)
+                    changed = True
+        lone_s = [k for k, (i, j) in enumerate(out) if j is None]
+        lone_t = [k for k, (i, j) in enumerate(out) if i is None]
+        for ks in lone_s:
+            best = min(lone_t, key=lambda kt: c(out[ks][0], out[kt][1]), default=None)
+            if best is not None and c(out[ks][0], out[best][1]) < SKIP:
+                out[ks] = (out[ks][0], out[best][1])
+                out[best] = (None, None)
+                lone_t.remove(best)
+                changed = True
+        out = [p for p in out if p != (None, None)]
+    return out
 
 
 def insert_after(tok, el):

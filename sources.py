@@ -150,12 +150,13 @@ def revision(root, cid, desc):
 
 def _page_texts(root, page):
     """(element, "text"|"tail") for every text node on printed page `page`:
-    after <pb n=page> and before the next pb, notes included."""
+    after <pb n=page> and before the next pb, notes included.  A page the
+    print left unnumbered is named by its image instead (pb="tcp:3442:3")."""
     out, on = [], False
     for el in root.iter():
         element = isinstance(el.tag, str)
         if element and el.tag == T + "pb":
-            on = el.get("n") == page
+            on = page in (el.get("n"), el.get("facs"))
         elif on and element and el.text:
             out.append((el, "text"))
         if on and el.tail:
@@ -172,7 +173,8 @@ def _flex(s):
 def correct(tree, sup):
     """Apply the supplement's <corrections>: each <fix pb before tcp print
     after/> finds before+tcp+after in one text node of printed page pb (white
-    space matching any white space; exactly once) and sets the printed text
+    space matching any white space; exactly once, or once as the whole of
+    its text node) and sets the printed text
     there as <seg type="transcription" change="#id">, the transcription's
     reading kept in a comment inside it.  White space at either end of
     print stays outside the seg."""
@@ -188,6 +190,13 @@ def correct(tree, sup):
                           for i, x in enumerate((before, tcp, after)))
             hits = [(el, attr, m) for el, attr in _page_texts(root, page)
                     for m in re.finditer(pat, getattr(el, attr) or "")]
+            if len(hits) > 1:
+                # a letter or two can stand alone in its text node (a note's
+                # stray "M" before a gap): the hit that is the whole node wins
+                whole = [h for h in hits
+                         if not (getattr(h[0], h[1]) or "").replace(h[2].group(0), "", 1).strip()]
+                if len(whole) == 1:
+                    hits = whole
             if len(hits) != 1:
                 raise SystemExit(f"correction on p. {page}: {before!r} {tcp!r} {after!r} "
                                  f"found {len(hits)} times (needs exactly one)")
