@@ -2787,6 +2787,14 @@ def restructure(splits, log):
             _left, right = split_container(cur, tok)
             cleaned.append((right, (kind, labels)))
             cur = right
+        if len(cleaned) > 1 and has_content(b.children) and all(
+                t.kind in ("space", "noise") or t.kind == "atom" and t.el is not None
+                and local(t.el) in ("pb", "lb", "milestone", "fw") for t in b.children):
+            # only a page break before the first split ("<p><pb/>2. ..."):
+            # it goes with the words after it, not into an empty paragraph
+            cleaned[1][0].children[0:0] = b.children
+            relink(cleaned[1][0])
+            b.children = []
         # first segment keeps the original kind (ordinary paragraph)
         out = []
         lst = None
