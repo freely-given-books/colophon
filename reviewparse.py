@@ -211,7 +211,7 @@ def unwrap_lists(text):
     list differently: #[ #set enum(numbering: "a)", start: 2) + ... ]).
     The two lines are layout and become "//@scope" and
     "//@scope-end" lines for parse_review, and a #set enum inside such a
-    scope a "//@enum numbering|start" line."""
+    scope a "//@enum numbering|start|indent" line."""
     out, opens, depth = [], [], 0
     for line in text.split("\n"):
         st = line.strip()
@@ -228,9 +228,9 @@ def unwrap_lists(text):
             continue
         m = ENUM_RE.match(line)
         if m and opens:
-            args = dict(re.findall(r'(\w+):\s*("[^"]*"|\d+)', m.group(1)))
+            args = dict(re.findall(r'(\w+):\s*("[^"]*"|[\d.]+\w*)', m.group(1)))
             out.append("//@enum " + args.get("numbering", "").strip('"') + "|" +
-                       args.get("start", ""))
+                       args.get("start", "") + "|" + args.get("indent", ""))
             continue
         depth += len(re.findall(r"(?<!\\)\[", line)) - len(re.findall(r"(?<!\\)\]", line))
         out.append(line)
@@ -243,7 +243,7 @@ def parse_review(text, inline_headings=False, titled=True, edition_heads=False):
     edition's own (titled), which goes to headings.
 
     r.list_info: body index of a "+" marker -> {"depth", "numbering",
-    "start"}, and of a "¶" marker of a paragraph indented under a list item
+    "start", "indent"}, and of a "¶" marker of a paragraph indented under a list item
     (Typst sets it inside the item) -> {"depth"}: how many items enclose it,
     and the numbering a #[ #set enum(...) ] scope gives its list."""
     r = Review()
@@ -258,7 +258,7 @@ def parse_review(text, inline_headings=False, titled=True, edition_heads=False):
     text = unwrap_lists(text)
     if inline_headings:
         text = join_brackets(text)
-    scopes = []                # #[ ] scopes: [numbering, start pending, items open]
+    scopes = []                # #[ ] scopes: [numbering, start pending, items open, indent]
     items = []                 # columns of the list items open at this point
 
     def enclosing(col):
@@ -269,10 +269,13 @@ def parse_review(text, inline_headings=False, titled=True, edition_heads=False):
     def item_mark(col, kind="+"):
         depth = enclosing(col)
         items.append(col)
-        info = {"kind": kind, "depth": depth, "numbering": None, "start": None}
+        info = {"kind": kind, "depth": depth, "numbering": None, "start": None,
+                "indent": None}
         if scopes:              # set rules reach into inner scopes
             info["numbering"] = next((sc[0] for sc in reversed(scopes) if sc[0]), None)
             info["start"], scopes[-1][1] = scopes[-1][1], None
+            if depth == scopes[-1][2]:  # the scope's own list, not one inside it
+                info["indent"] = scopes[-1][3]
         r.list_info[len(r.body)] = info
     r.body_sp_map = {}
     ends = 0                   # scopes closed by the block before
@@ -284,10 +287,11 @@ def parse_review(text, inline_headings=False, titled=True, edition_heads=False):
             if l.startswith("//@scope-end"):
                 ends += 1
             elif l.startswith("//@scope"):
-                scopes.append([None, None, len(items)])
+                scopes.append([None, None, len(items), None])
             elif l.startswith("//@enum ") and scopes:
-                num, start = l[len("//@enum "):].split("|")
+                num, start, indent = l[len("//@enum "):].split("|")
                 scopes[-1][:2] = [num or None, int(start) if start else None]
+                scopes[-1][3] = indent or None
         lines = [l for l in block.split("\n")
                  if l.strip() and not l.lstrip().startswith(("//", "#set ", "#show:", "#import "))]
         if not lines:

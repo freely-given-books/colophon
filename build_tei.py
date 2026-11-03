@@ -2105,7 +2105,7 @@ def review_division(d, review, f, log, unresolved):
         tok = owner.get(jw) if jw is not None else None
         if tok is not None:
             LIST_SHAPE.append((tok, info, f))
-        elif info["depth"] or info.get("numbering") or info.get("start"):
+        elif info["depth"] or info.get("numbering") or info.get("start") or info.get("indent"):
             unresolved.append((f, "list shape", tgt[jw][0] if jw is not None else "(end)"))
     # words the review left alone but put a note after
     in_cluster = {j for _ts, _n, idxs in cl for j in idxs}
@@ -2502,7 +2502,8 @@ def apply_list_shape(log):
     a list inside that item, a paragraph it indents under an item goes
     into the item, and a list it numbers in its own way (#[ #set enum(
     numbering: "a)", start: 2) ... ]) gets list/@rend (the numbering) and
-    item/@n on its first item (the start). Printed text is not moved
+    item/@n on its first item (the start); one it sets in (indent: 12pt)
+    gets list/@style="indent". Printed text is not moved
     across other text: only the nesting changes."""
     last, cur = {}, None             # depth -> the latest item at that depth
     for tok, info, f in LIST_SHAPE:
@@ -2516,7 +2517,8 @@ def apply_list_shape(log):
                       if local(conts[i].el) == "item"), None)
             cell = next((c for c in reversed(conts) if local(c.el) == "cell"), None)
             if k is None and cell is not None and d == 1 and info["kind"] in ("+", "-") and \
-                    not info.get("numbering") and not info.get("start"):
+                    not info.get("numbering") and not info.get("start") and \
+                    not info.get("indent"):
                 # a branch of a brace the review sets under the branch before
                 if cell.el.get("rend") != "nested":
                     cell.el.set("rend", "nested")
@@ -2524,8 +2526,16 @@ def apply_list_shape(log):
                     log.append((f, "list", f"table cell at '{tok.orig}'",
                                 "nested under the branch before"))
                 continue
+            if k is None and cell is not None and d == 0 and info.get("indent"):
+                # a brace's branches the review sets one step in
+                table = next(c for c in reversed(conts) if local(c.el) == "table")
+                if table.el.get("style") != "indent":
+                    table.el.set("style", "indent")
+                    table.el.set("change", "#review")
+                    log.append((f, "list", f"table at '{tok.orig}'", "set one step in"))
+                continue
             if k is None:
-                if d or info.get("numbering") or info.get("start"):
+                if d or info.get("numbering") or info.get("start") or info.get("indent"):
                     log.append((f, "skipped", f"list item at '{tok.orig}'", "not an item"))
                 continue
             item, lst = conts[k], conts[k - 1]
@@ -2551,6 +2561,11 @@ def apply_list_shape(log):
                 lst.el.set("rend", num)
                 lst.el.set("change", "#review")
                 log.append((f, "list", f"numbering at '{tok.orig}'", num))
+            if info.get("indent") and lst.el.get("style") != "indent":
+                # set one step in, under the numbered paragraph it belongs to
+                lst.el.set("style", "indent")
+                lst.el.set("change", "#review")
+                log.append((f, "list", f"list at '{tok.orig}'", "set one step in"))
             if info.get("start"):
                 first = next(c for c in lst.children
                              if c.kind == "container" and local(c.el) == "item")
@@ -3196,6 +3211,10 @@ def add_header(root, editor_name):
          "(its level in @n); it is not printed text."),
         (".//t:*[@rend='run-on']", "@rend='run-on': a block this edition runs on "
          "from the one before without a space between them."),
+        (".//t:list[@style='indent']", "list[@style='indent']: a printed list this "
+         "edition sets one step in, under the numbered paragraph it belongs to."),
+        (".//t:table[@style='indent']", "table[@style='indent']: a brace whose "
+         "branches this edition sets one step in, as list[@style='indent']."),
         (".//t:list[@rend]", "list/@rend: the numbering this edition gives a list "
          "(a Typst numbering pattern, e.g. 'a)'); item/@n on its first item: the "
          "number it starts from."),

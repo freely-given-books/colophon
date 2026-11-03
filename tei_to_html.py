@@ -313,6 +313,9 @@ class HtmlR(R):
                 cls = f' type="{OL_TYPE.get(lst.get("rend"), "1")}"'
             if not numbered and lst.get("rend") == "diagram" and self.layer == "reg":
                 cls = ' class="diagram"'           # kept whole (ebook.css)
+            if lst.get("style") == "indent" and self.layer == "reg":
+                cls = (cls.replace('class="', 'class="indent ') if 'class="' in cls
+                       else cls + ' class="indent"')    # set one step in (ebook.css)
             first = lst.find(T + "item")
             if numbered and first is not None and first.get("n"):
                 cls += f' start="{first.get("n")}"'
@@ -391,6 +394,8 @@ class HtmlR(R):
                 # "-": branches the print does not number, a plain list
                 op, sub_op = (('<ol class="brace">', "<ol>") if tag[0] == "ol" else
                               ('<ul class="brace plain">', '<ul class="plain">'))
+                if table.get("style") == "indent" and tag[0] == "ol":
+                    op = '<ol class="brace indent">'     # set one step in
                 out.append(op + "".join(
                     f"<li>{t}" + (f"{sub_op}{''.join(f'<li>{x}</li>' for x in sub)}</{tag[0]}>"
                                   if sub else "") + "</li>" for t, sub in items) + f"</{tag[0]}>")

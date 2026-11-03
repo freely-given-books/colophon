@@ -317,6 +317,9 @@ class R:
                 args.append(f'numbering: "{lst.get("rend")}"')
             if items and items[0].get("n"):
                 args.append(f"start: {items[0].get('n')}")
+            if lst.get("style") == "indent":
+                # one step in, its numbers at a paragraph's first-line indent
+                args.append(f"indent: {LIST_INDENT}")
         if args:
             lines += [ind + "#[", ind + f"#set enum({', '.join(args)})"]
         # a diagram (list/@rend="diagram", DIAGRAM_LISTS: a genealogy printed
@@ -413,6 +416,10 @@ class R:
         elif args:
             lines.append(ind + "]")
         return lines
+
+
+# a list/@style="indent" is set in by the template's first-line indent
+LIST_INDENT = "12pt"
 
 
 def joined_diagram(a, b):
@@ -733,17 +740,27 @@ def table_lines(r, table):
         lines += ["#["]
     if r.layer == "reg":
         _mode, blocks = layout.table_reading(table)
+        # branches set one step in (table/@style="indent"), as a list is
+        indent, scope = table.get("style") == "indent", False
         for marker, cells in blocks:
             t = collapse(" ".join(r.inline(c) for c in cells)).strip()
             if not t:
                 continue
             if marker in ("+", "-"):         # "-": branches printed unnumbered
                 nested = cells[0].get("rend") == "nested"
+                if indent and marker == "+" and not scope:
+                    lines += ["#[", f"#set enum(indent: {LIST_INDENT})"]
+                    scope = True
                 lines.append(("  " if nested else "") + marker + " " + t)
             else:
+                if scope:
+                    lines.append("]")
+                    scope = False
                 if lines and lines[-1] != "":
                     lines.append("")
                 lines += [block_start_escape(t), ""]
+        if scope:
+            lines.append("]")
     else:
         for row in table.findall(T + "row"):
             t = collapse(" ".join(r.inline(c) for c in row.findall(T + "cell"))).strip()
