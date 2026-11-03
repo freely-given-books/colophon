@@ -318,7 +318,7 @@ class R:
             if items and items[0].get("n"):
                 args.append(f"start: {items[0].get('n')}")
             if lst.get("style") == "indent":
-                # one step in, its numbers at a paragraph's first-line indent
+                # set in under its point, its numbers past a paragraph's indent
                 args.append(f"indent: {LIST_INDENT}")
         if args:
             lines += [ind + "#[", ind + f"#set enum({', '.join(args)})"]
@@ -418,8 +418,8 @@ class R:
         return lines
 
 
-# a list/@style="indent" is set in by the template's first-line indent
-LIST_INDENT = "12pt"
+# a list/@style="indent" is set in two first-line indents, under its point
+LIST_INDENT = "24pt"
 
 
 def joined_diagram(a, b):

@@ -78,8 +78,8 @@ overrides), so the ebook and the Typst chapters cannot drift apart.
     (`"a)"`, `"I."`; the review's `#[ #set enum(numbering: ..., start: N) ... ]`),
     `item/@n` on the first item the number it starts from, `list/@style="indent"`
     a list set one step in under the numbered paragraph it belongs to (Gouge;
-    the review's `#set enum(indent: 12pt)` in that scope, its numbers at a
-    paragraph's first-line indent; `ol.indent` in the ebook; a brace's
+    the review's `#set enum(indent: 24pt)` in that scope, its numbers two
+    first-line indents in, under its point; `ol.indent` in the ebook; a brace's
     branches, `table/@style="indent"`, the same), an item or a
     paragraph the review indents under an item moved inside it, a paragraph
     run on into a list's last item moved there (`@prev`);

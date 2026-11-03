@@ -2502,7 +2502,7 @@ def apply_list_shape(log):
     a list inside that item, a paragraph it indents under an item goes
     into the item, and a list it numbers in its own way (#[ #set enum(
     numbering: "a)", start: 2) ... ]) gets list/@rend (the numbering) and
-    item/@n on its first item (the start); one it sets in (indent: 12pt)
+    item/@n on its first item (the start); one it sets in (indent: 24pt)
     gets list/@style="indent". Printed text is not moved
     across other text: only the nesting changes."""
     last, cur = {}, None             # depth -> the latest item at that depth
