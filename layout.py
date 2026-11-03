@@ -14,6 +14,10 @@ the TEI root element and returning a list of files, in reading order:
                                            # the title, as a centred line
      "part": None,                         # optional: a part heading before this
                                            # file (ebook only; print sets its own)
+     "kicker": None,                       # optional: the file's place in the
+                                           # work's own divisions ("The Fourth
+                                           # Treatise · §§. 1–12"), a line under
+                                           # its title (ebook; print: <kicker>)
      "parts": [el, el, ...]}               # TEI elements, in order
 
 A part that is a <div> is set with its own heading (DIV_LEVELS gives the

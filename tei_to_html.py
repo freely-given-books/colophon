@@ -496,6 +496,8 @@ class HtmlR(R):
         out = [f'<section id="{ident}">']
         if title:
             out.append(f"<h3>{html.escape(title, quote=False)}</h3>")
+        if f.get("kicker"):
+            out.append(f'<p class="kicker">{html.escape(f["kicker"], quote=False)}</p>')
         if f.get("subtitle") is not None:
             t = self.text(f["subtitle"])
             if t:
