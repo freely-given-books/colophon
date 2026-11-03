@@ -142,6 +142,8 @@ class HtmlR(R):
         super().__init__(*a, **k)
         self.notes = []          # (number, body) for the current division
         self.note_no = 0
+        self.mark_no = 0
+        self.marks = {}           # note id -> printed mark (note/@rend="mark")
 
     def esc(self, s):
         s = html.escape(s, quote=False)
@@ -169,12 +171,18 @@ class HtmlR(R):
             return f'<span class="smallcaps">{inner}</span>'
         return inner
 
-    def footnote(self, body):
-        self.note_no += 1
-        n = self.note_no
+    def footnote(self, body, mark=None):
+        if mark:
+            # set with its printed mark: an id of its own, the numbers go on
+            self.mark_no += 1
+            n = f"m{self.mark_no}"
+            self.marks[n] = html.escape(mark)
+        else:
+            self.note_no += 1
+            n = self.note_no
         self.notes.append((n, body))
         return (f'<a class="noteref" id="nr-{n}" href="#fn-{n}" '
-                f'epub:type="noteref" role="doc-noteref"><sup>{n}</sup></a>')
+                f'epub:type="noteref" role="doc-noteref"><sup>{self.marks.get(n, n)}</sup></a>')
 
     def text(self, el):
         """Inline XHTML of el; quotes stay straight until the block it goes
@@ -515,7 +523,7 @@ class HtmlR(R):
             body = curl(NOTEREF_GAP.sub(r"\1", body))
             out.append(f'<aside id="fn-{n}" class="note" epub:type="footnote" '
                        f'role="doc-footnote"><p><a href="#nr-{n}" '
-                       f'role="doc-backlink">{n}.</a> {body}</p></aside>')
+                       f'role="doc-backlink">{self.marks.get(n, f"{n}.")}</a> {body}</p></aside>')
         out.append("</section>")
         return out
 
@@ -727,7 +735,7 @@ class HtmlR(R):
                 body = curl(NOTEREF_GAP.sub(r"\1", body))
                 out.append(f'<aside id="fn-{n}" class="note" epub:type="footnote" '
                            f'role="doc-footnote"><p><a href="#nr-{n}" '
-                           f'role="doc-backlink">{n}.</a> {body}</p></aside>')
+                           f'role="doc-backlink">{self.marks.get(n, f"{n}.")}</a> {body}</p></aside>')
             out.append("</section>")
         out.append("</section>")
         return out

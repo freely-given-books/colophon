@@ -83,6 +83,10 @@ overrides), so the ebook and the Typst chapters cannot drift apart.
     branches, `table/@style="indent"`, the same), an item or a
     paragraph the review indents under an item moved inside it, a paragraph
     run on into a list's last item moved there (`@prev`);
+    `note[@rend="mark"]` a note set with its printed mark `@n` (Gouge's *
+    references between a wife's and a husband's duties; the review's
+    `#footnote(numbering: (..) => "*")[...]`; the template keeps the numbers
+    going),
     `@rend="run-on"` a block run on with no space between;
     `epigraph[@rend="quote"]` / `q[@rend="quote"]` set as `#quote[...]`
   - a closer with a dateline or several signatories is set one line each,

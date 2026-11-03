@@ -70,7 +70,7 @@ class Plain(R):
     def emph(self, inner):
         return inner
 
-    def footnote(self, body):
+    def footnote(self, body, mark=None):
         return ""
 
 
@@ -91,12 +91,12 @@ class ReviewR(HtmlR):
         self.prefix = prefix
         self.year = printed_year
 
-    def footnote(self, body):
+    def footnote(self, body, mark=None):
         self.note_no += 1
         n = self.note_no
         self.notes.append((n, body))
         return (f'<a class="noteref" id="{self.prefix}nr-{n}" '
-                f'href="#{self.prefix}fn-{n}"><sup>{n}</sup></a>')
+                f'href="#{self.prefix}fn-{n}"><sup>{html.escape(mark) if mark else n}</sup></a>')
 
     public = False
     rule_name = "machine"

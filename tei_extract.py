@@ -132,7 +132,11 @@ class R:
     def emph(self, inner):
         return f"#emph[{block_start_escape(inner)}]"
 
-    def footnote(self, body):
+    def footnote(self, body, mark=None):
+        """mark: a note the edition sets with its printed mark (note/@rend
+        "mark", Gouge's * references), not a number."""
+        if mark:
+            return f'#footnote(numbering: (..) => "{mark}")[{block_start_escape(body)}]'
         return f"#footnote[{block_start_escape(body)}]"
 
     def linebreak(self):
@@ -220,13 +224,13 @@ class R:
             if not self.note_shown(c):
                 return ""
             body = collapse(self.inline(c)).strip()
-            return self.footnote(body) if body else ""
+            return self.footnote(body, note_mark(c, self.layer)) if body else ""
         if n == "anchor":
             note = self.moved.get(c.get("{http://www.w3.org/XML/1998/namespace}id"))
             if self.layer != "reg" or note is None:
                 return ""
             body = collapse(self.inline(note)).strip()
-            return self.footnote(body) if body else ""
+            return self.footnote(body, note_mark(note, self.layer)) if body else ""
         if n == "label":
             if self.layer == "reg" and in_numbered:
                 return ""
@@ -453,15 +457,22 @@ def bracket_end(s, i):
     return None
 
 
-EMPH, NOTE = "#emph[", "#footnote["
+EMPH = "#emph["
+NOTE_RE = re.compile(r'#footnote(\(numbering: \(\.\.\) => "[^"]*"\))?\[')
+
+
+def note_mark(note, layer):
+    """The printed mark a note[@rend="mark"] is set with in the edition (its
+    @n), else None; the orig layer numbers every note, as the TCP is read."""
+    return note.get("n") if layer == "reg" and note.get("rend") == "mark" else None
 
 
 def trailing_notes(inner):
     """Split the footnotes that end an italic run off it: (text, notes)."""
     notes = ""
     while inner.endswith("]"):
-        at = next((p for p in (m.start() for m in re.finditer(re.escape(NOTE), inner))
-                   if bracket_end(inner, p + len(NOTE) - 1) == len(inner) - 1), None)
+        at = next((m.start() for m in NOTE_RE.finditer(inner)
+                   if bracket_end(inner, m.end() - 1) == len(inner) - 1), None)
         if at is None or not inner[:at].strip():
             break
         notes = inner[at:] + notes

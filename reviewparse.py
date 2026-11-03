@@ -25,7 +25,7 @@ def strip_markup(line):
     s = line
     s = re.sub(r"#linebreak\(\)", " ", s)
     s = re.sub(r"#align\([^)]*\)\[", "", s)
-    s = re.sub(r"#footnote\[", " ", s)
+    s = re.sub(r'#footnote(\(numbering: \(\.\.\) => "[^"]*"\))?\[', " ", s)
     s = re.sub(r"#(emph|super|strong|smallcaps)\[", "", s)
     # closing brackets of Typst content blocks (escaped \] stays literal)
     s = re.sub(r"(?<!\\)\]", "", s)
@@ -125,13 +125,16 @@ def _scan(s, out_body, notes, italic=False, in_note=None, buf=None, sp_state=Non
                 i += m.end()
                 continue
             m = re.match(r"#(emph|strong|super|smallcaps|quote|footnote)\[", s[i:]) or \
-                re.match(r"#(align)\([^)]*\)\[", s[i:])
+                re.match(r"#(align)\([^)]*\)\[", s[i:]) or \
+                re.match(r'#(footnote)\(numbering: \(\.\.\) => "([^"]*)"\)\[', s[i:])
             if m:
                 inner, j = _bracket_arg(s, i + m.end() - 1)
                 name = m.group(1)
                 if name == "footnote":
                     flush()
-                    note = {"anchor": len(out_body), "toks": [], "sp": [], "last": " "}
+                    note = {"anchor": len(out_body), "toks": [], "sp": [], "last": " ",
+                            # set with its printed mark (#footnote(numbering: (..) => "*")[..])
+                            "mark": m.group(2) if m.re.groups > 1 else None}
                     notes.append(note)
                     _scan(inner, out_body, notes, False, note, None, sp_state)
                 elif name == "align":

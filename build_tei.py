@@ -2051,6 +2051,17 @@ def review_division(d, review, f, log, unresolved):
             log.append((f, "note", " ".join(e[0] for e in es), "(dropped)"))
             continue
         nt = review.notes[j]
+        if nt.get("mark") and nt["mark"] == note_tok.el.get("n"):
+            # set with its printed mark, not a number
+            if note_tok.el.get("rend") != "mark":
+                note_tok.el.set("rend", "mark")
+                note_tok.el.set("change", "#review")
+                log.append((f, "note", " ".join(e[0] for e in es)[:40],
+                            f"set with its mark {nt['mark']}"))
+        elif nt.get("mark"):
+            unresolved.append((f, "note mark", f"{nt['mark']} (printed: {note_tok.el.get('n')})"))
+        elif note_tok.el.get("rend") == "mark":
+            del note_tok.el.attrib["rend"]
         nowner = {}
         ncl, _ = align(es, [(t, "w") for t, _ in nt["toks"]], [], f + " note", nowner)
         for jj, tok in nowner.items():
@@ -3223,6 +3234,8 @@ def add_header(root, editor_name):
          "edition sets one step in, under the numbered paragraph it belongs to."),
         (".//t:table[@style='indent']", "table[@style='indent']: a brace whose "
          "branches this edition sets one step in, as list[@style='indent']."),
+        (".//t:note[@rend='mark']", "note[@rend='mark']: a note this edition sets "
+         "with its printed mark (@n, e.g. *), not a number."),
         (".//t:list[@rend]", "list/@rend: the numbering this edition gives a list "
          "(a Typst numbering pattern, e.g. 'a)'); item/@n on its first item: the "
          "number it starts from."),

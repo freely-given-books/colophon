@@ -140,7 +140,7 @@ def verses(vs):
 
 def prose(text):
     text = re.sub(r"#(?:emph|strong|smallcaps|super)\[", "", text)
-    text = re.sub(r"#footnote\[", " ", text)
+    text = re.sub(r'#footnote(\(numbering: \(\.\.\) => "[^"]*"\))?\[', " ", text)
     text = re.sub(r"\\(.)", r"\1", text).replace("]", "")
     return re.sub(r"\s+", " ", text)
 
