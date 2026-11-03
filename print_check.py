@@ -122,7 +122,7 @@ def stray_footnotes(pdf):
         notes = sum(1 for ln in pg if ln and ln[0][2] >= foot and ln[0][0].startswith("*")
                     and ln[0][4] - ln[0][2] < 0.95 * body)
         marks = sum(1 for ln in pg for j, w in enumerate(ln)
-                    if j > 0 and (w[0] == "*" and small(w) or re.search(r"[^\s*]\*", w[0])))
+                    if (j > 0 and w[0] == "*") or re.search(r"[^\s*]\*", w[0]))
         return notes, marks
     for i, pg in enumerate(pages):
         if not pg:
