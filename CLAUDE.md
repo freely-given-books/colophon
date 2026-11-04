@@ -76,9 +76,17 @@ overrides), so the ebook and the Typst chapters cannot drift apart.
     leaves out is not aligned, so words added at the end are not lost)
   - lists the review shapes (Sibbes): `list/@rend` a numbering of its own
     (`"a)"`, `"I."`; the review's `#[ #set enum(numbering: ..., start: N) ... ]`),
-    `item/@n` on the first item the number it starts from, an item or a
+    `item/@n` on the first item the number it starts from, `list/@style="indent"`
+    a list set one step in under the numbered paragraph it belongs to (Gouge;
+    the review's `#set enum(indent: 24pt)` in that scope, its numbers two
+    first-line indents in, under its point; `ol.indent` in the ebook; a brace's
+    branches, `table/@style="indent"`, the same), an item or a
     paragraph the review indents under an item moved inside it, a paragraph
     run on into a list's last item moved there (`@prev`);
+    `note[@rend="mark"]` a note set with its printed mark `@n` (Gouge's *
+    references between a wife's and a husband's duties; the review's
+    `#footnote(numbering: (..) => "*")[...]`; the template keeps the numbers
+    going),
     `@rend="run-on"` a block run on with no space between;
     `epigraph[@rend="quote"]` / `q[@rend="quote"]` set as `#quote[...]`
   - a closer with a dateline or several signatories is set one line each,

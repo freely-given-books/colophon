@@ -105,8 +105,11 @@ def stray_footnotes(pdf):
                 if not (0 <= k < len(pages)) or not pages[k]:
                     return False
                 fk = 0.6 * max(w[4] for l in pages[k] for w in l)
+                # the second of two touching markers ("wrath:236,237"): a word
+                # of its own after the comma between them
                 return any((w[0] == n and j > 0 and small(w)) or
-                           (glued.search(w[0]) and (w[2] < fk or j > 0))
+                           (glued.search(w[0]) and (w[2] < fk or j > 0)) or
+                           (w[0] == n and j > 0 and l[j - 1][0] in (",", "\u00b7"))
                            for l in pages[k] for j, w in enumerate(l))
             if has_marker(i):
                 continue
@@ -114,6 +117,24 @@ def stray_footnotes(pdf):
                 if has_marker(k):
                     out.append((n, i + 1, k + 1))
                     break
+    # notes set with a printed mark (note[@rend="mark"], "*"): as many marks
+    # after a word as notes at the foot, page by page
+    def stars(k):
+        pg = pages[k]
+        foot = 0.6 * max(w[4] for l in pg for w in l)
+        notes = sum(1 for ln in pg if ln and ln[0][2] >= foot and ln[0][0].startswith("*")
+                    and ln[0][4] - ln[0][2] < 0.95 * body)
+        marks = sum(1 for ln in pg for j, w in enumerate(ln)
+                    if (j > 0 and w[0] == "*") or re.search(r"[^\s*]\*", w[0]))
+        return notes, marks
+    for i, pg in enumerate(pages):
+        if not pg:
+            continue
+        notes, marks = stars(i)
+        if notes > marks:
+            k = next((k for k in (i + 1, i - 1) if 0 <= k < len(pages) and pages[k]
+                      and stars(k)[1] > stars(k)[0]), i)
+            out.append(("*", i + 1, k + 1))
     return out
 
 
@@ -137,7 +158,14 @@ def split_footnotes(pdf):
                  max(w[4] - w[2] for w in ln) < 0.95 * body]
         if not notes:
             continue
-        first_num = next((k for k, ln in enumerate(notes) if re.match(r"\d+\D", ln[0][0] + " ")
+        # a note opens with its number, or its printed mark (note[@rend="mark"]),
+        # which is read as a line of its own beside the note's first words
+        stars = [ln[0] for ln in notes if [w[0] for w in ln] == ["*"]]
+        notes = sorted((ln for ln in notes if [w[0] for w in ln] != ["*"]), key=lambda ln: ln[0][2])
+        starred = {id(ln) for ln in notes
+                   if any(abs(st[2] - ln[0][2]) < 3 and st[1] < ln[0][1] for st in stars)}
+        first_num = next((k for k, ln in enumerate(notes) if id(ln) in starred or
+                          re.match(r"(\d+|\*)\D", ln[0][0] + " ")
                           and not re.fullmatch(r"\d+", " ".join(w[0] for w in ln))), None)
         before = notes[:first_num] if first_num is not None else []
         # the page number alone is not a note; the lines must sit just above the

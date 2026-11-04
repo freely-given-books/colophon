@@ -142,6 +142,8 @@ class HtmlR(R):
         super().__init__(*a, **k)
         self.notes = []          # (number, body) for the current division
         self.note_no = 0
+        self.mark_no = 0
+        self.marks = {}           # note id -> printed mark (note/@rend="mark")
 
     def esc(self, s):
         s = html.escape(s, quote=False)
@@ -169,12 +171,18 @@ class HtmlR(R):
             return f'<span class="smallcaps">{inner}</span>'
         return inner
 
-    def footnote(self, body):
-        self.note_no += 1
-        n = self.note_no
+    def footnote(self, body, mark=None):
+        if mark:
+            # set with its printed mark: an id of its own, the numbers go on
+            self.mark_no += 1
+            n = f"m{self.mark_no}"
+            self.marks[n] = html.escape(mark)
+        else:
+            self.note_no += 1
+            n = self.note_no
         self.notes.append((n, body))
         return (f'<a class="noteref" id="nr-{n}" href="#fn-{n}" '
-                f'epub:type="noteref" role="doc-noteref"><sup>{n}</sup></a>')
+                f'epub:type="noteref" role="doc-noteref"><sup>{self.marks.get(n, n)}</sup></a>')
 
     def text(self, el):
         """Inline XHTML of el; quotes stay straight until the block it goes
@@ -313,6 +321,9 @@ class HtmlR(R):
                 cls = f' type="{OL_TYPE.get(lst.get("rend"), "1")}"'
             if not numbered and lst.get("rend") == "diagram" and self.layer == "reg":
                 cls = ' class="diagram"'           # kept whole (ebook.css)
+            if lst.get("style") == "indent" and self.layer == "reg":
+                cls = (cls.replace('class="', 'class="indent ') if 'class="' in cls
+                       else cls + ' class="indent"')    # set one step in (ebook.css)
             first = lst.find(T + "item")
             if numbered and first is not None and first.get("n"):
                 cls += f' start="{first.get("n")}"'
@@ -391,6 +402,8 @@ class HtmlR(R):
                 # "-": branches the print does not number, a plain list
                 op, sub_op = (('<ol class="brace">', "<ol>") if tag[0] == "ol" else
                               ('<ul class="brace plain">', '<ul class="plain">'))
+                if table.get("style") == "indent" and tag[0] == "ol":
+                    op = '<ol class="brace indent">'     # set one step in
                 out.append(op + "".join(
                     f"<li>{t}" + (f"{sub_op}{''.join(f'<li>{x}</li>' for x in sub)}</{tag[0]}>"
                                   if sub else "") + "</li>" for t, sub in items) + f"</{tag[0]}>")
@@ -483,6 +496,8 @@ class HtmlR(R):
         out = [f'<section id="{ident}">']
         if title:
             out.append(f"<h3>{html.escape(title, quote=False)}</h3>")
+        if f.get("kicker"):
+            out.append(f'<p class="kicker">{html.escape(f["kicker"], quote=False)}</p>')
         if f.get("subtitle") is not None:
             t = self.text(f["subtitle"])
             if t:
@@ -510,7 +525,7 @@ class HtmlR(R):
             body = curl(NOTEREF_GAP.sub(r"\1", body))
             out.append(f'<aside id="fn-{n}" class="note" epub:type="footnote" '
                        f'role="doc-footnote"><p><a href="#nr-{n}" '
-                       f'role="doc-backlink">{n}.</a> {body}</p></aside>')
+                       f'role="doc-backlink">{self.marks.get(n, f"{n}.")}</a> {body}</p></aside>')
         out.append("</section>")
         return out
 
@@ -722,7 +737,7 @@ class HtmlR(R):
                 body = curl(NOTEREF_GAP.sub(r"\1", body))
                 out.append(f'<aside id="fn-{n}" class="note" epub:type="footnote" '
                            f'role="doc-footnote"><p><a href="#nr-{n}" '
-                           f'role="doc-backlink">{n}.</a> {body}</p></aside>')
+                           f'role="doc-backlink">{self.marks.get(n, f"{n}.")}</a> {body}</p></aside>')
             out.append("</section>")
         out.append("</section>")
         return out

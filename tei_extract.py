@@ -132,7 +132,11 @@ class R:
     def emph(self, inner):
         return f"#emph[{block_start_escape(inner)}]"
 
-    def footnote(self, body):
+    def footnote(self, body, mark=None):
+        """mark: a note the edition sets with its printed mark (note/@rend
+        "mark", Gouge's * references), not a number."""
+        if mark:
+            return f'#footnote(numbering: (..) => "{mark}")[{block_start_escape(body)}]'
         return f"#footnote[{block_start_escape(body)}]"
 
     def linebreak(self):
@@ -220,13 +224,13 @@ class R:
             if not self.note_shown(c):
                 return ""
             body = collapse(self.inline(c)).strip()
-            return self.footnote(body) if body else ""
+            return self.footnote(body, note_mark(c, self.layer)) if body else ""
         if n == "anchor":
             note = self.moved.get(c.get("{http://www.w3.org/XML/1998/namespace}id"))
             if self.layer != "reg" or note is None:
                 return ""
             body = collapse(self.inline(note)).strip()
-            return self.footnote(body) if body else ""
+            return self.footnote(body, note_mark(note, self.layer)) if body else ""
         if n == "label":
             if self.layer == "reg" and in_numbered:
                 return ""
@@ -317,6 +321,9 @@ class R:
                 args.append(f'numbering: "{lst.get("rend")}"')
             if items and items[0].get("n"):
                 args.append(f"start: {items[0].get('n')}")
+            if lst.get("style") == "indent":
+                # set in under its point, its numbers past a paragraph's indent
+                args.append(f"indent: {LIST_INDENT}")
         if args:
             lines += [ind + "#[", ind + f"#set enum({', '.join(args)})"]
         # a diagram (list/@rend="diagram", DIAGRAM_LISTS: a genealogy printed
@@ -415,6 +422,10 @@ class R:
         return lines
 
 
+# a list/@style="indent" is set in two first-line indents, under its point
+LIST_INDENT = "24pt"
+
+
 def joined_diagram(a, b):
     """Two diagram lists side by side: b straight after a, nothing between."""
     return (a is not None and b is not None and isinstance(a.tag, str) and
@@ -446,15 +457,22 @@ def bracket_end(s, i):
     return None
 
 
-EMPH, NOTE = "#emph[", "#footnote["
+EMPH = "#emph["
+NOTE_RE = re.compile(r'#footnote(\(numbering: \(\.\.\) => "[^"]*"\))?\[')
+
+
+def note_mark(note, layer):
+    """The printed mark a note[@rend="mark"] is set with in the edition (its
+    @n), else None; the orig layer numbers every note, as the TCP is read."""
+    return note.get("n") if layer == "reg" and note.get("rend") == "mark" else None
 
 
 def trailing_notes(inner):
     """Split the footnotes that end an italic run off it: (text, notes)."""
     notes = ""
     while inner.endswith("]"):
-        at = next((p for p in (m.start() for m in re.finditer(re.escape(NOTE), inner))
-                   if bracket_end(inner, p + len(NOTE) - 1) == len(inner) - 1), None)
+        at = next((m.start() for m in NOTE_RE.finditer(inner)
+                   if bracket_end(inner, m.end() - 1) == len(inner) - 1), None)
         if at is None or not inner[:at].strip():
             break
         notes = inner[at:] + notes
@@ -733,17 +751,27 @@ def table_lines(r, table):
         lines += ["#["]
     if r.layer == "reg":
         _mode, blocks = layout.table_reading(table)
+        # branches set one step in (table/@style="indent"), as a list is
+        indent, scope = table.get("style") == "indent", False
         for marker, cells in blocks:
             t = collapse(" ".join(r.inline(c) for c in cells)).strip()
             if not t:
                 continue
             if marker in ("+", "-"):         # "-": branches printed unnumbered
                 nested = cells[0].get("rend") == "nested"
+                if indent and marker == "+" and not scope:
+                    lines += ["#[", f"#set enum(indent: {LIST_INDENT})"]
+                    scope = True
                 lines.append(("  " if nested else "") + marker + " " + t)
             else:
+                if scope:
+                    lines.append("]")
+                    scope = False
                 if lines and lines[-1] != "":
                     lines.append("")
                 lines += [block_start_escape(t), ""]
+        if scope:
+            lines.append("]")
     else:
         for row in table.findall(T + "row"):
             t = collapse(" ".join(r.inline(c) for c in row.findall(T + "cell"))).strip()
