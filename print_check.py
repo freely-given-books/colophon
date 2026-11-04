@@ -105,8 +105,11 @@ def stray_footnotes(pdf):
                 if not (0 <= k < len(pages)) or not pages[k]:
                     return False
                 fk = 0.6 * max(w[4] for l in pages[k] for w in l)
+                # the second of two touching markers ("wrath:236,237"): a word
+                # of its own after the comma between them
                 return any((w[0] == n and j > 0 and small(w)) or
-                           (glued.search(w[0]) and (w[2] < fk or j > 0))
+                           (glued.search(w[0]) and (w[2] < fk or j > 0)) or
+                           (w[0] == n and j > 0 and l[j - 1][0] in (",", "\u00b7"))
                            for l in pages[k] for j, w in enumerate(l))
             if has_marker(i):
                 continue
