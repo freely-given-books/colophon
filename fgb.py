@@ -746,6 +746,14 @@ def main():
     p.add_argument("--lulu", metavar="FOLDER", help="Lulu's print-ready ZIPs "
                    "(<product id>_print-ready.zip), for books whose covers are not built here")
     p.set_defaults(fn=lambda a: __import__("export").main(a))
+    p = sub.add_parser("golden", help="every book's outputs kept as text, and "
+                       "compared after a change to colophon (golden.py)")
+    p.add_argument("action", choices=("save", "check"))
+    p.add_argument("dir", metavar="DIR", help="folder of golden outputs")
+    p.add_argument("books", nargs="*", metavar="BOOK", help="default: every TEI book")
+    p.add_argument("-j", "--jobs", type=int, default=0,
+                   help="books at a time (default: one per CPU)")
+    p.set_defaults(fn=lambda a: __import__("golden").main(a))
     p = sub.add_parser("find")
     p.add_argument("args", nargs="+", metavar="[BOOK] WORD")
     p.set_defaults(fn=cmd_find)

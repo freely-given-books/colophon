@@ -1,10 +1,10 @@
 [project]
 name = "colophon"
-version = "0.36.0"
+version = "0.37.0"
 description = "Early printed texts (EEBO-TCP, CCEL) to an enriched TEI master, print PDFs and EPUBs"
 readme = "README.md"
 license = "CC0-1.0"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 # uv.lock pins the exact versions. The spell checker's dictionary and lxml's
 # serialization shape every book's TEI, so an upgrade (uv lock --upgrade) is
 # a change like any other: ./fgb check --all must still pass.

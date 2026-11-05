@@ -66,7 +66,7 @@ def is_standalone_atom(el):
 class Tok:
     __slots__ = ("kind", "pieces", "el", "children", "parent", "idx",
                  "orig", "expanded", "reg", "resp", "rtype", "macrons",
-                 "gaps", "in_note", "extra", "sent_start")
+                 "gaps", "in_note", "extra")
 
     def __init__(self, kind, pieces=None, el=None):
         self.kind = kind          # word | space | noise | punct | atom | container
@@ -84,7 +84,6 @@ class Tok:
         self.gaps = []            # list of (global_index, element)
         self.in_note = False
         self.extra = {}
-        self.sent_start = False
 
     def __repr__(self):
         return f"<{self.kind} {self.orig!r}->{self.reg!r}>"

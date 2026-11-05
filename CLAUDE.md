@@ -183,6 +183,14 @@ volume), the reader page and the public comparison page (`fgb.build_web`):
 `<book>-vN-reader.html` and `<book>-vN-compare.html` in a release, linked to
 each other and to the EPUB and PDF by their release names.
 
+`./fgb golden save DIR` (`golden.py`) builds every TEI book and keeps its
+outputs as text in DIR: the rebuilt TEI, both layers, each EPUB unpacked,
+the reader and comparison pages, each PDF as `pdftotext -layout` with its page
+count. `./fgb golden check DIR` builds them again and lists the books that
+differ (diffs in `DIR.new/DIFF.txt`). Save it before a refactor of colophon;
+every step must check clean, or with a diff the editor has accepted. Two
+builds of the same tree compare clean (about two minutes for all books).
+
 `./fgb release` (`release.py`) says which books are done and makes releases
 of them: a book is done when the editor's signed tag `<author>/<book>/vN`
 holds (the folder unchanged since) and it passes the gates (its

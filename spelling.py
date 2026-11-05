@@ -167,7 +167,7 @@ NAMES = {
     "cain": "Cain", "abel": "Abel", "noah": "Noah",
     "dauid": "David", "iaakobs": "Jacobs",
     "booz": "Boaz", "rahel": "Rachel", "shemei": "Shimei",
-    "rebeckah": "Rebekah", "iaakobs": "Jacobs",
+    "rebeckah": "Rebekah",
 }
 
 # Words that are a proper name when capitalized mid-sentence and an ordinary
@@ -258,7 +258,7 @@ MANUAL = {
     "affaires": "affairs", "privatly": "privately",
     "purloyning": "purloining", "purloyne": "purloin",
     "fained": "feigned", "faining": "feigning",
-    "sleight": "slight", "sleightly": "slightly",
+    "sleight": "slight",
     # "forme" and "maine" are real modern words in narrow technical senses,
     # so the dictionary oracle leaves them alone -- but in an Early Modern
     # religious text they are always "form" and "main".
@@ -285,7 +285,7 @@ MANUAL = {
     "thorowly": "thoroughly",
     "throughly": "thoroughly", "thorowout": "throughout",
     "releefe": "relief", "releeue": "relieve", "releeued": "relieved",
-    "beleefe": "belief", "greefe": "grief", "greeues": "grieves",
+    "greefe": "grief", "greeues": "grieves",
     "cheefe": "chief", "cheefely": "chiefly", "breefe": "brief",
     "breefely": "briefly", "theefe": "thief", "theeues": "thieves",
     "eie": "eye", "eies": "eyes", "eied": "eyed",
@@ -343,7 +343,7 @@ MANUAL = {
     "expressely": "expressly", "solemnely": "solemnly",
     "infinitly": "infinitely", "erroniously": "erroneously",
     "alwaies": "always", "alway": "always", "adaies": "adays",
-    "eies": "eyes", "saies": "says", "waies": "ways", "wayes": "ways",
+    "saies": "says", "waies": "ways", "wayes": "ways",
     "daies": "days", "praier": "prayer", "praiers": "prayers",
     "praying": "praying", "raiment": "raiment",
     "auncient": "ancient", "apparant": "apparent",
@@ -526,11 +526,11 @@ MANUAL = {
     "eleuenth": "eleventh",
     "wooll": "wool",
     "nearenesse": "nearness",
-    "waightie": "weighty", "weightie": "weighty",
+    "weightie": "weighty",
     "fourefold": "fourfold",
     "warth": "wrath",
     "themselues": "themselves", "selues": "selves",
-    "mixt": "mixed", "queene": "queen", "siluer": "silver",
+    "mixt": "mixed", "siluer": "silver",
     "vncapable": "uncapable", "vncurable": "uncurable",
     "svrvey": "survey",
     "heer": "here",

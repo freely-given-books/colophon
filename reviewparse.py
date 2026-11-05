@@ -21,18 +21,6 @@ MARKS = "̀-֑ͯ-ׇ᷀-᷿⃐-⃿︠-︯"
 TOKEN_RE = re.compile(r"[\w'’" + MARKS + r"]+|[^\w\s" + MARKS + r"]", re.S)
 
 
-def strip_markup(line):
-    s = line
-    s = re.sub(r"#linebreak\(\)", " ", s)
-    s = re.sub(r"#align\([^)]*\)\[", "", s)
-    s = re.sub(r'#footnote(\(numbering: \(\.\.\) => "[^"]*"\))?\[', " ", s)
-    s = re.sub(r"#(emph|super|strong|smallcaps)\[", "", s)
-    # closing brackets of Typst content blocks (escaped \] stays literal)
-    s = re.sub(r"(?<!\\)\]", "", s)
-    s = re.sub(r"\\(.)", r"\1", s)
-    return s
-
-
 # ---------------------------------------------------------------------------
 # Markup-aware parser: keeps footnotes apart from the body, and records which
 # words are italic, so notes can be matched and moved and emphasis compared.
@@ -52,7 +40,6 @@ class Review:
     def __init__(self):
         self.body, self.notes, self.headings, self.short = [], [], [], []
         self.body_sp = []        # parallel to body: whitespace before the token?
-        self._last = " "         # last character seen in the body text
 
 
 def _bracket_arg(s, i):
