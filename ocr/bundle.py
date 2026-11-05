@@ -3,12 +3,15 @@
 import hashlib
 import json
 import re
-import shutil
 import subprocess
 import time
 from pathlib import Path
 
 DPI = 300
+# page images (a scan given as images, not a PDF): scaled so the long side is
+# at most this, about 300 dpi for a folio page; microfilm frames come at
+# several times the resolution the engines are trained on
+MAX_SIDE = 4000
 IMAGES = (".png", ".jpg", ".jpeg", ".tif", ".tiff", ".jp2")
 # both page-marker forms: the bundle's ("--- PDF page 3 ---") and the
 # export's ("--- Source PDF page 3 (OCR sequence 3) ---")
@@ -45,11 +48,9 @@ class Bundle:
             subprocess.run(["pdftoppm", "-f", str(n), "-l", str(n), "-r", str(DPI), "-png",
                             "-singlefile", str(self.pdf), str(out.with_suffix(""))], check=True)
         else:
-            img = self.images[n - 1]
-            if img.suffix.lower() == ".png":
-                shutil.copy(img, out)
-            else:
-                subprocess.run(["magick", str(img), str(out)], check=True)
+            # ImageMagick, scaled down only when larger than MAX_SIDE (">")
+            subprocess.run(["magick", str(self.images[n - 1]), "-resize",
+                            f"{MAX_SIDE}x{MAX_SIDE}>", str(out)], check=True)
         return out
 
     def engine_dir(self, engine):
@@ -72,8 +73,8 @@ class Bundle:
             # how pages are made: an OCR reading depends on the image as much as the engine
             poppler = subprocess.run(["pdftoppm", "-v"], capture_output=True, text=True).stderr
             m["render"] = (f"pdftoppm -r {DPI} -png ({poppler.split(chr(10))[0].strip()})"
-                           if self.pdf is not None else "the page images as given (PNG copied, "
-                           "others converted with ImageMagick)")
+                           if self.pdf is not None else
+                           f"magick -resize {MAX_SIDE}x{MAX_SIDE}> (long side at most {MAX_SIDE} px)")
         m.setdefault("engines", {}).setdefault(
             engine, {**settings, "started": time.strftime("%Y-%m-%dT%H:%M:%S%z")})
         path.write_text(json.dumps(m, indent=1) + "\n")
