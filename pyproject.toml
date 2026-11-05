@@ -15,5 +15,8 @@ dependencies = [
     "typst>=0.13",        # verify.py's compile check
 ]
 
+[dependency-groups]
+dev = ["pytest>=8"]
+
 [tool.uv]
 package = false
