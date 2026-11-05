@@ -18,8 +18,10 @@ What it checks
      in ~/.cache/fgb-tei, where the eebo-tcp-book skill puts them).
   5. The extracted chapters compile with Typst (if the `typst` Python
      package or CLI is installed).
+  6. The rules every book keeps (rules.py: lessons from CLAUDE.md and the
+     editor's standing decisions, as checks).
 
-Exit code is 0 when 1, 2, 3 (and 4/5 when run) pass. Step 2 is strict:
+Exit code is 0 when 1, 2, 3, 6 (and 4/5 when run) pass. Step 2 is strict:
 chapters/typ must be what the TEI gives back (// comment lines aside), so
 the print edition and the ebook, both made from the TEI, cannot drift apart.
 """
@@ -184,6 +186,16 @@ def main():
     except Exception as e:  # compile error
         print(f"[5] Typst compile FAILED: {e}")
         ok = False
+
+    # 6. the rules every book keeps (rules.py)
+    import rules
+    broken = [(r, p) for r, p in rules.book_rules(book, tei, bk / "book.pdf") if p]
+    print(f"[6] rules kept (rules.py): {not broken}")
+    for r, problems in broken:
+        print(f"    {r}: {len(problems)}")
+        for p in problems[:10]:
+            print("      " + p)
+    ok &= not broken
 
     shutil.rmtree(tmp, ignore_errors=True)
     print("OK" if ok else "FAILED")

@@ -44,3 +44,6 @@ jobs:
         env:
           FGB_LIBRARY: ${{ github.workspace }}/books
         run: uv run --locked --project colophon python colophon/fgb.py check --all
+      - name: colophon's own tests
+        working-directory: books
+        run: uv run --locked --project colophon --group dev pytest -q colophon/tests

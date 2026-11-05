@@ -329,6 +329,18 @@ sentence inline. A paragraph is split around a block table or list. The
 machine records the tidying (item numbers, trailing commas, capitals, the
 closing stop) as readings.
 
+## Rules every book keeps
+
+`rules.py`, run by `verify.py` as step [6] (so by `./fgb check`, CI and the
+release gates), turns lessons and the editor's standing decisions into
+checks: `spelling_archaisms` (lesson 5), `god_capitalized` (God always
+capitalized: the machine never lowercases a printed "God"; the editor may,
+for a false god), `sweep_clean` (sweep.py's spacing and semicolon hits:
+the books' thin-space lesson and lesson 12), `quotes_curled` (lesson 15).
+A rule a signed book still breaks waits in `KNOWN` until that book's next
+revision. `tests/test_rules.py` breaks each rule on purpose (`uv run
+--project colophon --group dev pytest colophon/tests`; CI runs it).
+
 ## Review workflow
 
 The reviewed Typst chapters remain a fine place to edit. To read the
@@ -392,13 +404,14 @@ and copied back into `chapters/typ`.
    evidence). Use the document's *own* spelling for the letters ("euery",
    not "every"; check word frequencies). Greek/Hebrew and citation digits
    need the page image — the editor filled 8 of those by hand.
-5. **The machine keeps grammatical archaisms** (hath, doth, thou, thee,
-   thy, ye, shalt, wilt, art, hast, dost): different words, not spellings.
-   An edition may still modernize them (Simon Magus does: hath → has, thou
-   → you); those are editor decisions (`reg[@type="grammar"]`), never
-   `spelling.py` entries.
-   Footnotes stay in original spelling in the machine pass (abbreviations
-   expanded only).
+5. **The machine keeps grammatical archaisms** (hath, doth, thou, thee, thy,
+   ye, shalt, wilt, art, hast, dost): different words, not spellings. An
+   edition may still modernize them (Simon Magus does: hath → has, thou →
+   you); those are editor decisions (`reg[@type="grammar"]`), never
+   `spelling.py` entries. Footnotes stay in original spelling in the machine
+   pass (abbreviations expanded only). `rules.py` checks it
+   (`spelling_archaisms`: no archaism or "-eth" made "-s" in the spelling
+   tables).
 6. **Sentence case rules are legacy-compatible on purpose**: first word of
    a paragraph or after . ! ? is capitalized; an italic boundary right
    after a full stop does *not* start a sentence (so "…do.] vers. 26." stays
@@ -418,12 +431,13 @@ and copied back into `chapters/typ`.
    which stay in original spelling). Context-dependent ones were left out
    (harts/hearts, Tigres, Corinthes). `bee`→`be` is a known risk: it
    mangles "Bee-hive", which the editor layer here overrides.
-8. **Typst `xml()` gotchas** (from the removed `tei.typ`): paths resolve relative to the
-   file that calls `xml()`, so load the XML in the book file and pass it
-   in; `while` loops hit an iteration limit on a whole book, use recursion;
-   adjacent string pieces keep double spaces (collapse them yourself);
-   markup drops the space before `#footnote[...]` but strings don't; smart
-   apostrophes are applied to markup, not strings.
+8. **Typst `xml()` gotchas** (from the removed `tei.typ`): paths resolve
+   relative to the file that calls `xml()`, so load the XML in the book file
+   and pass it in; `while` loops hit an iteration limit on a whole book, use
+   recursion; adjacent string pieces keep double spaces (collapse them
+   yourself); markup drops the space before `#footnote[...]` but strings
+   don't; smart apostrophes are applied to markup, not strings. Only matters
+   if a Typst reader of the TEI comes back.
 9. **TEI validation**: `tei_all.rng` is on GitHub
    (`TEIC/TEI-Simple`), tei-c.org is often unreachable; validate with jing
    (`relaxng/jing-trang` releases); keep both in `~/.cache/fgb-tei`,
@@ -444,10 +458,10 @@ and copied back into `chapters/typ`.
    `reg[@type="spacing"]` choice. `compare.py pdf` catches the rest.
 12. **Typst reads `#emph[x](y)` as a call** with more arguments, and a `;`
    straight after a call (`#emph[x];`) ends it and is swallowed, so the
-   semicolon never prints. Any `(`, `[` or `;` straight after a markup call is
-   escaped (`\(`, `\;`) by `tei_extract.py`;
-   check against everything rendered so far, since an empty text part can
-   sit in between.
+   semicolon never prints. Any `(`, `[` or `;` straight after a markup call
+   is escaped (`\(`, `\;`) by `tei_extract.py`; check against everything
+   rendered so far, since an empty text part can sit in between. `rules.py`
+   checks it (`sweep_clean`: sweep.py's semicolon hits).
 13. **1700 printings differ from 1609 ones**: long s (`ſ`) throughout and
    `<g ref="char:V">Ʋ</g>` for capital U are letter forms, normalized by
    the machine pass (not spelling decisions); nouns are capitalized
@@ -464,8 +478,10 @@ and copied back into `chapters/typ`.
    joined (`finish()` in `tei_to_html.py`). The rule is Typst's own: it
    remembers open quotes, so `sacrificed,' wisdom` opens and `beasts,'`
    closes. The same rule makes a straight apostrophe inside a single
-   quotation (`'You are Christ's,'`) close it, so a book quoting with
-   single quotes types its apostrophes as `’` in `chapters/typ`.
+   quotation (`'You are Christ's,'`) close it, so a book quoting with single
+   quotes types its apostrophes as `’` in `chapters/typ`. `rules.py` checks
+   the result (`quotes_curled`: no closing quote set as an opening one,
+   ebook and print).
 16. **Pages missing from the transcribed copy** come from another copy as a
    supplement, `source/<ID>.supplied.xml` beside the TCP file, which
    `sources.load()` splices in at the gap for every tool (Gouge pp.
