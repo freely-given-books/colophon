@@ -13,6 +13,7 @@ dependencies = [
     "pyspellchecker>=0.8",
     "cydifflib>=1.2",     # difflib compiled; the scripts fall back to difflib
     "typst>=0.13",        # verify.py's compile check
+    "pillow>=10",         # ocr/crops.py: printed lines cut from the page
 ]
 
 [dependency-groups]
