@@ -517,7 +517,6 @@ def compute_auto(toks):
                 if in_head:
                     t.reg = auto_reg(t, False, heading=True)
                 else:
-                    t.sent_start = state["start"]
                     t.reg = auto_reg(t, state["start"],
                                      quote_start=state.pop("quote_first", False))
                     if re.search(r"[A-Za-z]", t.expanded):

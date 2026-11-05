@@ -299,7 +299,6 @@ def table_reading(table):
     heading line ("¶"), any other row is one "+" item (its leading number
     cell is left out by the machine pass). "inline" (the table interrupts a
     sentence): all cells column by column, no markers."""
-    import re
     grid = table_grid(table)
     if not grid:
         return "rows", []

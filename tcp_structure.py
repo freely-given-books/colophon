@@ -21,7 +21,6 @@ the same way, and --layout lists the files it makes.
 import sys
 from collections import Counter
 
-from lxml import etree
 
 import sources
 
