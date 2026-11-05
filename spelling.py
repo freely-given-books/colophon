@@ -395,8 +395,8 @@ MANUAL = {
     "heerof": "hereof", "heereafter": "hereafter",
 
     # -- from the Perkins and Simon Magus reviews (shared table) --------
-    "approoue": "approve", "approoued": "approved", "approoueth": "approves",
-    "approueth": "approves",
+    "approoue": "approve", "approoued": "approved", "approoueth": "approveth",
+    "approueth": "approveth",
     "oeconom": "oecon",  # bibliographic abbreviation, leave inert
     "folkes": "folks",
     "vxorem": "uxorem",
