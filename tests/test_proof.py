@@ -40,3 +40,13 @@ def test_marked(tmp_path):
     assert marked.line(data, top[0]) == "01 15.0 And [[or]](the?) God spoke."
     assert re.match(r"01 +\d", marked.line(data, marked.sentences(data)[0]))
     assert json.dumps(seed) == "7"
+
+
+def test_marked_ties(tmp_path):
+    # both sentences reach the 15.0 cap; the later one has the stronger second word
+    data = {"chapter-01.typ": [["And", 0.0, None, -15.0], ["or", -16.0, "the", -0.5],
+                               ["God", -0.2, None, -15.0], ["spoke.", -1.0, None, -15.0],
+                               ["And", 0.0, None, -15.0], ["or", -16.0, "the", -0.5],
+                               ["of", -9.0, None, -15.0], ["spoke.", -1.0, None, -15.0]]}
+    top, *_ = marked.choose(data, share=0.5, sample=0.0, seed=7)
+    assert [s[1] for s in top] == [4]
