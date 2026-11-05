@@ -812,6 +812,8 @@ def main():
     p.add_argument("out", metavar="OUT_DIR")
     p.add_argument("witness", nargs="+", metavar="WITNESS.txt")
     p.add_argument("--agree", type=int, help="witnesses that must agree (default: all)")
+    p.add_argument("--modern", action="store_true", help="compare in modern spelling (witnesses "
+                   "of a later printing, or a modern text)")
     p.set_defaults(fn=cmd_collate)
     p = sub.add_parser("crops", help="each collation candidate's printed lines, cut from "
                        "the page, and contact sheets (ocr/crops.py)")
