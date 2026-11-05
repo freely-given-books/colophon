@@ -1065,7 +1065,12 @@ def layout_file_lines(r, f, cfg, pre):
                   else f"== {title}", ""]
     if f.get("subtitle") is not None:
         t = collapse(r.inline(f["subtitle"])).strip()
-        if t:
+        if t and r.layer == "reg" and f.get("subtitle_rend") == "inset":
+            # a printed summary: set off, a size smaller, ragged right (its long
+            # runs of dash-joined phrases leave justification few breaks)
+            lines += ["#block(inset: (x: 1em))[", "  #set par(justify: false)",
+                      f"  #text(size: 0.9em)[{t}]", "]", ""]
+        elif t:
             lines += [f"#align(center)[{t}]" if r.layer == "reg" else t, ""]
     for el in f["parts"]:
         part_lines(r, el, 3, lines)
