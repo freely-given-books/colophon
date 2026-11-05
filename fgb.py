@@ -582,6 +582,28 @@ def cmd_pdf(a):
     build_pdf(bk, dist_dir(bk))
 
 
+def cmd_ocr(a):
+    from ocr.bundle import Bundle
+    from ocr import engines
+    bundle = Bundle(a.bundle)
+    if a.action == "export":
+        print(f"wrote {bundle.export(a.engine, a.out)}")
+        return
+    if len(a.pages) not in (0, 2):
+        sys.exit("give the first and last page, or none for all")
+    first, last = a.pages or (1, bundle.page_count())
+    kw = {"alto": a.alto} if a.engine == "kraken" else {}
+    n = engines.run(bundle, a.engine, range(first, last + 1), **kw)
+    print(f"{a.engine}: {n} page(s) read; ./fgb ocr export {a.bundle} {a.engine} when done")
+
+
+def cmd_collate(a):
+    from ocr import collate
+    # a book by name, or any book folder (an earlier state of one, say)
+    a.book = a.book if (Path(a.book) / "source").is_dir() else str(find_book(a.book))
+    collate.main(a)
+
+
 def cmd_packages(a):
     for name, ver, source in a.packages:
         print(f"  {'@local/' + name + ':' + ver:28} {source}")
@@ -754,13 +776,37 @@ def main():
     p.add_argument("-j", "--jobs", type=int, default=0,
                    help="books at a time (default: one per CPU)")
     p.set_defaults(fn=lambda a: __import__("golden").main(a))
+    p = sub.add_parser("ocr", help="OCR a scan bundle with an engine, or export its "
+                       "witness text (ocr/)")
+    p.add_argument("action", choices=("run", "export"))
+    p.add_argument("bundle", metavar="BUNDLE", help="folder with source/<scan>.pdf or page images")
+    p.add_argument("engine", choices=("tesseract", "kraken", "glm"))
+    p.add_argument("pages", nargs="*", type=int, metavar="FIRST LAST",
+                   help="run: the scan's pages (default: all)")
+    p.add_argument("--alto", action="store_true", help="kraken: ALTO (line boxes) too")
+    p.add_argument("--out", help="export: the witness file (default: beside the bundle)")
+    p.set_defaults(fn=cmd_ocr)
+    p = sub.add_parser("collate", help="the light pass: a TCP book's printed text "
+                       "against OCR witnesses of the same print (ocr/collate.py)")
+    p.add_argument("book")
+    p.add_argument("out", metavar="OUT_DIR")
+    p.add_argument("witness", nargs="+", metavar="WITNESS.txt")
+    p.add_argument("--agree", type=int, help="witnesses that must agree (default: all)")
+    p.set_defaults(fn=cmd_collate)
+    p = sub.add_parser("crops", help="each collation candidate's printed lines, cut from "
+                       "the page, and contact sheets (ocr/crops.py)")
+    p.add_argument("candidates", metavar="CANDIDATES.json")
+    p.add_argument("bundle", metavar="BUNDLE")
+    p.add_argument("out", metavar="OUT_DIR")
+    p.add_argument("--per", type=int, default=6, help="candidates per sheet")
+    p.set_defaults(fn=lambda a: __import__("ocr.crops", fromlist=["main"]).main(a))
     p = sub.add_parser("find")
     p.add_argument("args", nargs="+", metavar="[BOOK] WORD")
     p.set_defaults(fn=cmd_find)
     a = ap.parse_args()
     if a.cmd == "find":
         a.book, a.word = (a.args[0], a.args[1]) if len(a.args) > 1 else (None, a.args[0])
-    if a.cmd not in ("list", "find", "release", "coverage", "export"):
+    if a.cmd not in ("list", "find", "release", "coverage", "export", "ocr", "collate", "crops"):
         # the Typst templates, from the submodule's tags (packages.py)
         try:
             a.packages = packages.setup()

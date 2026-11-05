@@ -329,6 +329,31 @@ sentence inline. A paragraph is split around a block table or list. The
 machine records the tidying (item numbers, trailing commas, capitals, the
 closing stop) as readings.
 
+## OCR and the light pass (`ocr/`)
+
+A scan is a bundle folder (`source/<scan>.pdf` or page images; pages,
+each engine's reading and a manifest with the scan's checksum, the render
+and every engine's settings; see `ocr/__init__.py`). One engine at a time:
+
+```sh
+./fgb ocr run BUNDLE tesseract [FIRST LAST]   # CPU; .txt, .tsv word boxes, .hocr
+./fgb ocr run BUNDLE kraken --alto            # GPU; needs $FGB_KRAKEN, $FGB_KRAKEN_MODEL
+./fgb ocr run BUNDLE glm                      # GLM-OCR through Ollama ($FGB_OLLAMA)
+./fgb ocr export BUNDLE kraken                # <bundle>.kraken.witness.txt beside it
+./fgb collate BOOK OUT_DIR W1.witness.txt W2.witness.txt [--agree N]
+./fgb crops OUT_DIR/candidates.json BUNDLE OUT_DIR/crops
+```
+
+`collate` is the light pass for a TCP book (lesson 17): its orig layer
+against OCR witnesses of the same print; `extra.md` (words the TCP lacks,
+or another word) and `nearmiss.md` (one-word swaps the first pass would
+take for spelling), and `candidates.json` for `crops`, which cuts each
+candidate's printed lines from the page (Tesseract's word boxes) into
+contact sheets to read. Confirmed slips go in the supplement's
+`<corrections>`. It reproduces the Perkins collation of 2026-11-01 exactly.
+Runs are resumable; every output belongs under `work/<book>/`, never a temp
+folder.
+
 ## Rules every book keeps
 
 `rules.py`, run by `verify.py` as step [6] (so by `./fgb check`, CI and the
