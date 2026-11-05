@@ -737,7 +737,10 @@ def main():
     p.set_defaults(fn=lambda a: __import__("release").main(a))
     p = sub.add_parser("export", help="a release laid out for the books.freely.giving "
                        "site, with its IMPORT.md (export.py)")
-    p.add_argument("dir", metavar="DIR", help="folder to export to (new, or an earlier export)")
+    p.add_argument("dir", metavar="DIR", nargs="?",
+                   help="folder to export to (new, or an earlier export)")
+    p.add_argument("--site-json", action="store_true",
+                   help="only write site.json (the site's sync manifest) into the release folder")
     p.add_argument("--release", help="release folder (default: the newest in dist/release/)")
     p.add_argument("--force", action="store_true", help="replace an earlier export in DIR")
     p.add_argument("--lulu", metavar="FOLDER", help="Lulu's print-ready ZIPs "
