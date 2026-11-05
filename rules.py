@@ -45,11 +45,7 @@ def context(text, m, before=40, after=25):
 
 # breaks of a rule kept until a signed book that relies on them is revised
 # (changing them rewrites its TEI): entry -> why
-KNOWN = {
-    "approoueth": "Christian Economy credits approueth -> approves to the machine "
-                  "(3 readings); make it approveth at that book's next revision",
-    "approueth": "the same",
-}
+KNOWN = {}
 
 
 def spelling_archaisms():
