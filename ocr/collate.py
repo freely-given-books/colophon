@@ -14,6 +14,8 @@ least N witnesses (default: all) differ from the TCP there.
 Two passes, both into OUT_DIR:
   extra.md     witness words the TCP lacks (dropped words: Perkins "Lombard,",
                "though"), or a different word ("of" for "or")
+  --modern     compare words in modern spelling: for witnesses of a later
+               printing or a modern text, which respell (waies -> ways)
   nearmiss.md  one-word swaps the witnesses agree on but that look like
                spelling (this/his, them/then, bough/bought): the first pass
                filters these as noise
@@ -31,7 +33,32 @@ from pathlib import Path
 COLOPHON = Path(__file__).resolve().parent.parent
 
 
+# --modern: words compared in modern spelling (colophon's spelling.py), for
+# witnesses of a later printing or a modern text, which respell (waies ->
+# ways, knowes -> knows); off for OCR of the TCP's own printing
+MODERN = {"on": False}
+_modern = {}          # word -> its modern spelling
+
+
+ROMAN = re.compile(r"(?=[ivxlc]{2,}$)c{0,3}(xc|xl|l?x{0,3})(ix|iv|v?i{0,3})$")
+
+
+def modern_words(ws):
+    """--modern: "&" read as "and"; roman numerals (chapter numbers of
+    references, which a later text sets otherwise) left out. Without it
+    the words as they were: an "&" is not a word."""
+    if not MODERN["on"]:
+        return [w for w in ws if w != "&"]
+    return ["and" if w == "&" else w for w in ws if not ROMAN.match(w.lower())]
+
+
 def norm(w):
+    if MODERN.get("on"):
+        lw = w.lower().replace("ſ", "s")
+        if lw not in _modern:
+            from spelling import modernize_word_lower
+            _modern[lw] = modernize_word_lower(lw)
+        w = _modern[lw]
     w = w.lower().replace("ſ", "s").replace("f", "s")   # Tesseract reads long s as f
     w = w.replace("v", "u").replace("j", "i").replace("y", "i").replace("w", "uu")
     w = re.sub(r"(.)\1+", r"\1", w)
@@ -57,13 +84,13 @@ def tcp_words(book):
             t = re.sub(r"#footnote\[[^\]]*\]", " ", p.read_text())
             t = re.sub(r"#\w+(\.\w+)*(\([^)]*\))?", " ", t)
             out.append(re.sub(r"^==+ .*$", " ", t, flags=re.M))
-    return re.findall(r"[A-Za-zſ]+", "\n".join(out))
+    return modern_words(re.findall(r"[A-Za-zſ]+|&", "\n".join(out)))
 
 
 def witness_words(path):
     t = Path(path).read_text()
     t = re.sub(r"^--- (?:Source )?PDF page (\d+).*$", r" PAGE\1 ", t, flags=re.M)
-    return re.findall(r"PAGE\d+|[A-Za-zſ]+", re.sub(r"-\n\s*", "", t))
+    return modern_words(re.findall(r"PAGE\d+|[A-Za-zſ]+|&", re.sub(r"-\n\s*", "", t)))
 
 
 def page_of(b, j):
@@ -95,6 +122,7 @@ def passes(a, b):
 
 
 def main(a_):
+    MODERN["on"] = bool(getattr(a_, "modern", False))
     need = a_.agree or len(a_.witness)
     a = tcp_words(Path(a_.book))
     res = [passes(a, witness_words(w)) for w in a_.witness]
@@ -134,4 +162,5 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("book"); ap.add_argument("out"); ap.add_argument("witness", nargs="+")
     ap.add_argument("--agree", type=int)
+    ap.add_argument("--modern", action="store_true")
     main(ap.parse_args())
