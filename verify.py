@@ -15,7 +15,8 @@ What it checks
      (as sources.load reads it: with its supplement's pages and corrections).
   4. The TEI validates against tei_all (needs java, jing and tei_all.rng:
      --jing path/to/jing.jar --schema path/to/tei_all.rng, or both found
-     in ~/.cache/fgb-tei, where the eebo-tcp-book skill puts them).
+     in ~/.cache/fgb-tei ($XDG_CACHE_HOME/fgb-tei), where the eebo-tcp-book
+     skill puts them).
   5. The extracted chapters compile with Typst (if the `typst` Python
      package or CLI is installed).
   6. The rules every book keeps (rules.py: lessons from CLAUDE.md and the
@@ -77,7 +78,8 @@ def main():
     ap.add_argument("--jing")
     ap.add_argument("--schema")
     a = ap.parse_args()
-    cache = Path.home() / ".cache" / "fgb-tei"
+    import library
+    cache = library.cache("fgb-tei")
     if not a.jing:
         a.jing = next((str(p) for p in sorted(cache.glob("jing-*/bin/jing.jar"))), None)
     if not a.schema and (cache / "tei_all.rng").exists():

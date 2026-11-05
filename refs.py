@@ -22,13 +22,14 @@ matches: the strongest mismatches are the ones to read.
 """
 
 import argparse
+import os
 import json
 import re
 import sys
 import urllib.request
 from pathlib import Path
 
-CACHE = Path.home() / ".cache" / "fgb-bible"
+CACHE = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "fgb-bible"
 SOURCES = {"kjv": "https://raw.githubusercontent.com/thiagobodruk/bible/master/json/en_kjv.json",
            "bsb": "https://bereanbible.com/bsb.txt"}
 

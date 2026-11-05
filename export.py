@@ -48,7 +48,7 @@ IMPORT = """\
 # Importing release {release} into books.freely.giving
 
 For Claude working in the `books-freelygiv-ing` repository. This folder is one
-release of Freely Given Books (the editions prepared by Courtney Hicks),
+release of Freely Given Books (the editions prepared by {editor}),
 laid out by `<author>/<book>/`. Read this file, `site.json`, and the site's
 `CLAUDE.md` and `docs/BOOK-FILES.md`, then bring each book in as below. Show
 the owner the plan (which books change, which are new) before writing.
@@ -294,7 +294,10 @@ def export(rel, out, lulu_dir=None):
     shutil.copy2(rel / "catalog.json", out / "catalog.json")
     (out / "site.json").write_text(json.dumps(site, indent=2, ensure_ascii=False) + "\n",
                                    encoding="utf-8")
-    (out / "IMPORT.md").write_text(IMPORT.format(release=cat["release"]), encoding="utf-8")
+    cfg = library.settings()
+    editor = cfg.get("editor_short") or cfg.get("editor") or "the editor"
+    (out / "IMPORT.md").write_text(IMPORT.format(release=cat["release"], editor=editor),
+                                   encoding="utf-8")
     missing = [s["book"] for s in site
                if not s["lulu"] or (isinstance(s["lulu"], list) and not all(s["lulu"]))]
     if missing:
