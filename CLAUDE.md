@@ -35,6 +35,12 @@ enriched TEI edition
 EPUB 3                                 <book>.epub
 ```
 
+`build_tei.py` is the command; its stages are the modules of `teibuild/`, in
+the order they depend on each other: `settings` (the book's `editorial.py`,
+read as `S.NAME` because a book rebinds them), `words`, `tokens`, `state`,
+`emit`, `machine` (the `#auto` pass), `align`, `decisions` (`#editor`),
+`spacing`, `emphasis`, `structure`, `notes`, `header`, `marking`, `report`.
+
 `tei_epub.py` gets its XHTML from `tei_to_html.py`, which reuses
 `tei_extract.py`'s renderer (the `R` class; its
 output methods `esc`/`emph`/`sup`/`footnote` are what the HTML subclass
