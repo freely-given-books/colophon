@@ -865,7 +865,9 @@ def cmd_make(a):
     md, js = catalog(rid, entries, colophon, a.trial)
     (root / "CATALOG.md").write_text(md, encoding="utf-8")
     (root / "catalog.json").write_text(js, encoding="utf-8")
-    sums = [f"{sha256(f)}  {f.name}" for f in sorted(root.iterdir()) if f.is_file()]
+    # for books.freely.giving's sync (export.py)
+    __import__("export").site_manifest(root)
+    sums =[f"{sha256(f)}  {f.name}" for f in sorted(root.iterdir()) if f.is_file()]
     (root / "SHA256SUMS").write_text("\n".join(sums) + "\n", encoding="utf-8")
     extra = [] if a.trial else [(REVISIONS.relative_to(REPO).as_posix(),
                                   record_release(rid, done + carried))]

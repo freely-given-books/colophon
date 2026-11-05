@@ -6,6 +6,9 @@ Claude (in the books-freelygiv-ing repository) how to bring it in.
   ./fgb export DIR --release FOLDER   # another release folder
   ./fgb export DIR --lulu FOLDER      # Lulu's print-ready ZIPs, for books
                                       # whose covers are not built here
+  ./fgb export --site-json [--release FOLDER]
+                                      # only site.json, into the release
+                                      # folder (release make writes it too)
 
 DIR gets:
   IMPORT.md             the import, step by step, for Claude in the site repo
@@ -192,6 +195,69 @@ def own_covers(b, d, lulu_dir, links):
     return added
 
 
+GITHUB = "freely-given-books/books"
+
+
+def kind(name):
+    """What a release file is for the site: pdf (the print interior), cover
+    (the Lulu cover), front (the front cover image), epub, reader (Read
+    Online), compare (What's New); None for anything else."""
+    if name.endswith("-reader.html"):
+        return "reader"
+    if name.endswith("-compare.html"):
+        return "compare"
+    if name.endswith(".epub"):
+        return "epub"
+    if re.search(r"-front\.(png|jpe?g)$", name):
+        return "front"
+    if re.search(r"-cover(-vol-\d+)?\.pdf$", name):
+        return "cover"
+    if name.endswith(".pdf"):
+        return "pdf"
+    return None
+
+
+def site_manifest(rel):
+    """site.json for a release folder: what books.freely.giving needs to pull
+    the release straight from GitHub (its sync-freely-given script). Per book
+    one edition per site page (one per volume for a book in volumes), each
+    with the site's slug, its Lulu link, its page count and its files by kind.
+    Lulu links, slugs and notes come from books/publishing.toml."""
+    cat = json.loads((rel / "catalog.json").read_text(encoding="utf-8"))
+    pub = tomllib.loads(PUBLISHING.read_text(encoding="utf-8")) if PUBLISHING.exists() else {}
+    books = []
+    for b in cat["books"]:
+        p = pub.get(b["book"], {})
+        slug = p.get("slug", b["folder"])
+        vols = {}
+        for f in dict.fromkeys(f["name"] for f in b["files"]):
+            k = kind(f)
+            if not k:
+                continue
+            m = re.search(r"-vol-(\d+)", f)
+            vols.setdefault(int(m.group(1)) if m else None, {})[k] = f
+        links = p.get("lulu", "")
+        editions = []
+        for n in sorted(vols, key=lambda n: n or 0):
+            files = vols[n]
+            lulu = (links[n - 1] if n and n <= len(links) else "") \
+                if isinstance(links, list) else links
+            editions.append({
+                "slug": f"{slug}-volume-{n}" if n else slug, "volume": n,
+                "lulu": lulu,
+                "pages": page_count(rel / files["pdf"]) if "pdf" in files else None,
+                "files": files})
+        books.append({"book": b["book"], "title": b["title"], "author": b["author"],
+                      "version": b["version"], "summary": b["summary"],
+                      "note": p.get("note", ""), "editions": editions})
+    data = {"schema": 1, "release": cat["release"],
+            "download": f"https://github.com/{GITHUB}/releases/download/{cat['release']}/",
+            "books": books}
+    (rel / "site.json").write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+                                   encoding="utf-8")
+    return data
+
+
 def export(rel, out, lulu_dir=None):
     cat = json.loads((rel / "catalog.json").read_text(encoding="utf-8"))
     pub = tomllib.loads(PUBLISHING.read_text(encoding="utf-8")) if PUBLISHING.exists() else {}
@@ -237,6 +303,13 @@ def export(rel, out, lulu_dir=None):
 
 def main(a):
     rel = Path(a.release).resolve() if a.release else newest_release()
+    if a.site_json:
+        d = site_manifest(rel)
+        n = sum(len(b["editions"]) for b in d["books"])
+        print(f"{rel / 'site.json'}: {len(d['books'])} book(s), {n} site page(s)")
+        return
+    if not a.dir:
+        sys.exit("export: give DIR (or --site-json)")
     out = Path(a.dir).expanduser().resolve()
     if out.exists() and any(out.iterdir()):
         # only an earlier export is ever replaced, never any other folder
