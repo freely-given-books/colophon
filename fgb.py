@@ -592,7 +592,8 @@ def cmd_ocr(a):
     if len(a.pages) not in (0, 2):
         sys.exit("give the first and last page, or none for all")
     first, last = a.pages or (1, bundle.page_count())
-    kw = {"alto": a.alto} if a.engine == "kraken" else {}
+    kw = {"alto": a.alto} if a.engine == "kraken" else \
+        {"retry_loops": a.retry_loops} if a.engine == "glm" else {}
     n = engines.run(bundle, a.engine, range(first, last + 1), **kw)
     print(f"{a.engine}: {n} page(s) read; ./fgb ocr export {a.bundle} {a.engine} when done")
 
@@ -602,6 +603,23 @@ def cmd_collate(a):
     # a book by name, or any book folder (an earlier state of one, say)
     a.book = a.book if (Path(a.book) / "source").is_dir() else str(find_book(a.book))
     collate.main(a)
+
+
+def cmd_proof(a):
+    from proof import proofread
+    bk = Book(find_book(a.book))
+    a.model = a.model or proofread.MODEL
+    e = bk.cfg.get("EPUB", {})
+    describe = a.describe or (f'{e["author"]}, "{e["title"]}"' if e.get("title") and e.get("author")
+                              else bk.dir.name)
+    proofread.main(a, bk.chapters, describe)
+
+
+def cmd_gapmark(a):
+    from proof import gapmark
+    bk = Book(find_book(a.book))
+    a.model = a.model or gapmark.MODEL
+    gapmark.main(a, bk.chapters)
 
 
 def cmd_packages(a):
@@ -784,6 +802,8 @@ def main():
     p.add_argument("pages", nargs="*", type=int, metavar="FIRST LAST",
                    help="run: the scan's pages (default: all)")
     p.add_argument("--alto", action="store_true", help="kraken: ALTO (line boxes) too")
+    p.add_argument("--retry-loops", action="store_true",
+                   help="glm: read again, with a repeat penalty, the pages where it looped")
     p.add_argument("--out", help="export: the witness file (default: beside the bundle)")
     p.set_defaults(fn=cmd_ocr)
     p = sub.add_parser("collate", help="the light pass: a TCP book's printed text "
@@ -800,13 +820,50 @@ def main():
     p.add_argument("out", metavar="OUT_DIR")
     p.add_argument("--per", type=int, default=6, help="candidates per sheet")
     p.set_defaults(fn=lambda a: __import__("ocr.crops", fromlist=["main"]).main(a))
+    p = sub.add_parser("proof", help="the proofread pass: a local model flags slips in "
+                       "chapters/typ (proof/proofread.py)")
+    p.add_argument("book")
+    p.add_argument("out", metavar="OUT.jsonl")
+    p.add_argument("--model", default=None, help="default: the policy's, qwen3.8:27b")
+    p.add_argument("--general", action="store_true", help="the wider prompt, not the small-word one")
+    p.add_argument("--no-think", action="store_true", help="thinking off")
+    p.add_argument("--chunk", type=int, default=100, help="words a request (default 100)")
+    p.add_argument("--files", help="only these files (a.typ,b.typ)")
+    p.add_argument("--book", dest="describe", help="the book, as the prompt names it "
+                   "(default: author and title from editorial.py)")
+    p.set_defaults(fn=cmd_proof)
+    p = sub.add_parser("gapmark", help="the gap marker: every word scored by a local "
+                       "model (proof/gapmark.py)")
+    p.add_argument("book")
+    p.add_argument("out", metavar="OUT.json")
+    p.add_argument("--model", default=None, help="default: qwen3.8:27b")
+    p.add_argument("--files", help="only these files (a.typ,b.typ)")
+    p.set_defaults(fn=cmd_gapmark)
+    p = sub.add_parser("marked", help="the sentences to read, from the gap marker's "
+                       "scores (proof/marked.py)")
+    p.add_argument("gapmark", metavar="GAPMARK.json")
+    p.add_argument("out", metavar="READ.txt")
+    p.add_argument("--share", type=float, default=0.15, help="top share by score (default 0.15)")
+    p.add_argument("--sample", type=float, default=0.05, help="random check of the rest (0.05)")
+    p.add_argument("--seed", type=int, help="the sample's seed (default: a new one, printed)")
+    p.set_defaults(fn=lambda a: __import__("proof.marked", fromlist=["main"]).main(a))
+    p = sub.add_parser("proof-bench", help="planted slips to measure the proofread and the "
+                       "marker (proof/bench.py)")
+    p.add_argument("action", choices=("plant", "run", "marker"))
+    p.add_argument("dir", metavar="DIR")
+    p.add_argument("models", nargs="*", metavar="MODEL|GAPMARK [FLAGS]")
+    p.add_argument("--n", type=int, default=20, help="plant: slips (default 20)")
+    p.add_argument("--seed", type=int, default=1, help="plant: seed (default 1)")
+    p.add_argument("--book", default="a book", help="run: the book, as the prompt names it")
+    p.set_defaults(fn=lambda a: __import__("proof.bench", fromlist=["main"]).main(a))
     p = sub.add_parser("find")
     p.add_argument("args", nargs="+", metavar="[BOOK] WORD")
     p.set_defaults(fn=cmd_find)
     a = ap.parse_args()
     if a.cmd == "find":
         a.book, a.word = (a.args[0], a.args[1]) if len(a.args) > 1 else (None, a.args[0])
-    if a.cmd not in ("list", "find", "release", "coverage", "export", "ocr", "collate", "crops"):
+    if a.cmd not in ("list", "find", "release", "coverage", "export", "ocr", "collate", "crops",
+                     "proof", "gapmark", "marked", "proof-bench"):
         # the Typst templates, from the submodule's tags (packages.py)
         try:
             a.packages = packages.setup()

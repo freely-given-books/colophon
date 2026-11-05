@@ -354,6 +354,25 @@ contact sheets to read. Confirmed slips go in the supplement's
 Runs are resumable; every output belongs under `work/<book>/`, never a temp
 folder.
 
+## Proofread (`proof/`)
+
+The policy decided with the editor on 2026-10-25 (`proof/__init__.py`),
+on a local model through Ollama ($FGB_OLLAMA), GPU jobs one at a time:
+
+```sh
+./fgb proof BOOK work/<book>/proof/qwen.jsonl       # Qwen 3.8 27B flags small-word slips
+./fgb gapmark BOOK work/<book>/proof/gapmark.json   # every word scored
+./fgb marked work/<book>/proof/gapmark.json work/<book>/proof/read.txt
+```
+
+A reader settles every flag against the sources, then reads `read.txt`:
+the top 15% of sentences by the marker's score and a random 5% of the rest
+(its seed in the heading). `./fgb proof-bench` plants slips in a finished
+book to measure a model or the marker again. Checked against All of Grace's
+run of 2026-11-01: the gap marker scores chapter 1 word for word the same,
+the proofread repeats every flag on unchanged text, `marked` rebuilds its
+top 15% exactly.
+
 ## Rules every book keeps
 
 `rules.py`, run by `verify.py` as step [6] (so by `./fgb check`, CI and the
