@@ -8,7 +8,7 @@ can be shown to leave the books as they were, or exactly how it changes them.
 
 What is kept, per book (DIR/<author>/<book>/):
   tei/      the TEI rebuilt from its source and chapters/typ (build_tei.py),
-            and the review report
+            the review report and the coverage counts (coverage.py)
   reg/ orig/  both layers extracted (tei_extract.py; orig with gaps shown)
   epub/<name>/  each EPUB unpacked: its text files, images as SHA-256
   web/      the reader and comparison pages (fgb.build_web)
@@ -95,6 +95,10 @@ def snapshot(book_dir, out):
                                if 'xml:id="review"' not in l), encoding="utf-8")
         run(PY, HERE / "tei_extract.py", bk.tei, out / "reg", "--layer", "reg")
         run(PY, HERE / "tei_extract.py", bk.tei, out / "orig", "--layer", "orig", "--show-gaps")
+        import coverage
+        (out / "tei" / "coverage.txt").write_text(
+            "".join(l + "\n" for l in coverage.summary(coverage.coverage(bk.tei))),
+            encoding="utf-8")
 
         built = tmp / "built"
         built.mkdir()
