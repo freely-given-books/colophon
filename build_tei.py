@@ -37,6 +37,7 @@ from teitok import T, local, tokenize  # noqa: E402
 import reviewparse  # noqa: E402
 import refstyle  # noqa: E402
 import layout  # noqa: E402
+import library  # noqa: E402
 import sources  # noqa: E402
 from teibuild import settings as S  # noqa: E402
 from teibuild.settings import load_tables  # noqa: E402
@@ -67,10 +68,14 @@ def main():
                     "index, page and context (for filling in editorial.py), then stop")
     ap.add_argument("--review", help="folder with dedication.typ, chapter-NN.typ")
     ap.add_argument("--report", help="write a Markdown report of review decisions")
-    ap.add_argument("--editor", default="Courtney Allen Hicks")
+    ap.add_argument("--editor", default=library.settings().get("editor"),
+                    help="the editor the TEI header credits (default: editor in the "
+                    "library's colophon.toml)")
     ap.add_argument("--tables", help="book's editorial.py (default: editorial.py "
                     "next to SOURCE, if there is one)")
     args = ap.parse_args()
+    if not args.list and not args.editor:
+        ap.error("who is the editor? set editor in the library's colophon.toml, or --editor")
     if not args.list and not args.out:
         ap.error("OUT is required unless --list is given")
     tables = Path(args.tables) if args.tables else Path(args.source).parent / "editorial.py"
