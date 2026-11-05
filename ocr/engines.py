@@ -2,7 +2,8 @@
 
   tesseract  CPU, several pages at a time; .txt, .tsv (word boxes), .hocr
   kraken     GPU, one batch call; .txt, and ALTO (.xml) with alto=True
-  glm        GLM-OCR through Ollama, GPU, a page at a time; .txt, .json
+  glm        GLM-OCR through Ollama, GPU, a page at a time; .txt, .json;
+             retry_loops: the pages where it looped, again with a repeat penalty
 
 Every run skips pages already read, so it can be stopped and resumed. The
 GPU engines are never run side by side: run() takes one engine at a time.
@@ -71,17 +72,42 @@ def kraken(bundle, pages, alto=False, device="cuda:0"):
     return done
 
 
-def glm(bundle, pages):
+def looped(text, rec):
+    """GLM ran away on a page: it hit the length limit, failed, or one
+    four-word phrase repeats 8 times or more."""
+    if rec.get("done_reason") == "length" or rec.get("status") != "recognized":
+        return True
+    words = text.split()
+    if len(words) > 40:
+        grams = [" ".join(words[i:i + 4]) for i in range(len(words) - 3)]
+        return max(grams.count(g) for g in set(grams)) >= 8
+    return False
+
+
+def glm(bundle, pages, retry_loops=False):
+    """retry_loops: read again, with a repeat penalty, the pages where GLM
+    looped; the first reading is kept as NNNNNN.first.json."""
     url = os.environ.get("FGB_OLLAMA", "http://localhost:11434").rstrip("/") + "/api/generate"
     out = bundle.engine_dir("glm")
     bundle.manifest("glm", {"model": GLM["model"], "prompt": GLM["prompt"], **GLM["options"]})
     done = 0
     for n in pages:
-        if (out / f"{n:06d}.json").exists():
+        rec_f, txt_f = out / f"{n:06d}.json", out / f"{n:06d}.txt"
+        options = GLM["options"]
+        if retry_loops:
+            if not rec_f.exists() or (out / f"{n:06d}.first.json").exists():
+                continue
+            if not looped(txt_f.read_text(encoding="utf-8") if txt_f.exists() else "",
+                          json.loads(rec_f.read_text(encoding="utf-8"))):
+                continue
+            rec_f.rename(out / f"{n:06d}.first.json")
+            options = {**options, "repeat_penalty": 1.15, "repeat_last_n": 256}
+        elif rec_f.exists():
             continue
-        body = json.dumps({**GLM, "stream": False, "images": [
+        body = json.dumps({**GLM, "options": options, "stream": False, "images": [
             base64.b64encode(bundle.page(n).read_bytes()).decode()]}).encode()
-        rec = {"pdf_page": n}
+        rec = {"pdf_page": n, **({"retry": "repeat_penalty 1.15, repeat_last_n 256"}
+                                 if retry_loops else {})}
         for attempt in (1, 2):       # a token-repeat loop or a timeout: once more
             try:
                 req = urllib.request.Request(url, body, {"Content-Type": "application/json"})
