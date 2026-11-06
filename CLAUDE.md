@@ -370,8 +370,10 @@ the top 15% of sentences by the marker's score and a random 5% of the rest
 (its seed in the heading). `./fgb proof-bench` plants slips in a finished
 book to measure a model or the marker again. Checked against All of Grace's
 run of 2026-11-01: the gap marker scores chapter 1 word for word the same,
-the proofread repeats every flag on unchanged text, `marked` rebuilds its
-top 15% exactly.
+the proofread repeats every flag on unchanged text. Many sentences reach
+the marker's 15.0 cap; `marked` ranks ties by their next-strongest words
+(0.38.1; before, ties kept reading order and the top 15% came from the
+first chapters only).
 
 ## Rules every book keeps
 

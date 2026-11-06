@@ -7,6 +7,9 @@ policy's steps 4 and 5.
 A sentence (split after . ! ?) scores as its strongest word:
   wrong  -log p of a small word in the text (high: the model finds it unlikely)
   gap    how strongly a small word was expected where the text has another
+Sentences tied on that score (many reach the 15.0 cap: Of Temptation 608 of
+1,368) rank by their next-strongest words, then by reading order, so the top
+share spans the book rather than filling from its first chapters.
 The top --share of the text by words, highest scores first, then a random
 --sample of the rest as a check, each listed in reading order as
 "NN score sentence" (NN the file's number), the strongest word marked
@@ -58,12 +61,18 @@ def line(data, s):
     return f"{num.group(0) if num else Path(f).stem} {score:4.1f} {' '.join(words)}"
 
 
+def strength(data, s):
+    """A sentence's rank key: its word scores, strongest first (the first is its score)."""
+    f, a, b, _, _ = s
+    return sorted((word_score(*data[f][i]) for i in range(a, b + 1)), reverse=True)
+
+
 def choose(data, share=0.15, sample=0.05, seed=None):
     """(top, sample, total words, words in top, seed)."""
     sents = sentences(data)
     total = sum(b - a + 1 for _, a, b, _, _ in sents)
     budget, top, used = share * total, [], 0
-    for s in sorted(sents, key=lambda s: -s[3]):
+    for s in sorted(sents, key=lambda s: [-x for x in strength(data, s)]):
         if used >= budget:
             break
         top.append(s)

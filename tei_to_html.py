@@ -500,7 +500,9 @@ class HtmlR(R):
             out.append(f'<p class="kicker">{html.escape(f["kicker"], quote=False)}</p>')
         if f.get("subtitle") is not None:
             t = self.text(f["subtitle"])
-            if t:
+            if t and self.layer == "reg" and f.get("subtitle_rend") == "inset":
+                out.append(f'<p class="inset summary">{t}</p>')      # a printed summary
+            elif t:
                 out.append(f'<p class="subtitle">{t}</p>')
         for el in f["parts"]:
             if local(el) == "div":
