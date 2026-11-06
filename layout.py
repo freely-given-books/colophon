@@ -12,6 +12,11 @@ the TEI root element and returning a list of files, in reading order:
      "short": None,                        # optional short (running-head) title
      "subtitle": el,                       # optional: a printed head set under
                                            # the title, as a centred line
+     "subtitle_rend": None,                # "inset": the subtitle is a printed
+                                           # summary of the file (Owen's chapter
+                                           # arguments), set off as a block indented
+                                           # both sides, a size smaller, ragged
+                                           # right, not centred
      "part": None,                         # optional: a part heading before this
                                            # file (ebook only; print sets its own)
      "kicker": None,                       # optional: the file's place in the
@@ -60,6 +65,7 @@ def book_layout(root, cfg):
         f.setdefault("short", None)
         f.setdefault("title", None)
         f.setdefault("subtitle", None)
+        f.setdefault("subtitle_rend", None)
     return files
 
 
