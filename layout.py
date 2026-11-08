@@ -308,8 +308,14 @@ def list_level(lst):
 
 
 def pad(level):
-    """The review's and the print's wrapper for a paragraph at that level."""
-    return f"#pad(left: {level * PARA_STEP:.1f}em)["
+    """The review's and the print's opening for a paragraph at that level: set
+    in, with the first-line indent every paragraph has (closed by PAD_END)."""
+    return f"#pad(left: {level * PARA_STEP:.1f}em)[{PAR_INDENT}["
+
+
+# a paragraph alone in its #pad is the first in it, which Typst does not indent
+PAR_INDENT = "#par(first-line-indent: (amount: 12pt, all: true))"
+PAD_END = "]]"
 
 
 def printed_text(el):
