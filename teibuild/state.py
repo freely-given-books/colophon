@@ -41,6 +41,7 @@ LIST_SHAPE = []         # (tok, list_info entry, file), in reading order
 
 
 EDITION_HEADS = []      # (tok, level, text, file): headings the edition adds
+PARA_LEVELS = []        # (tok, level, file): paragraphs the edition sets in by outline level
 
 
 ROOT = {"toks": []}

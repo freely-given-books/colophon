@@ -39,6 +39,7 @@ when its sections are cut into chapters) is left out of the edition.
 check() lists text that no part covers, so nothing vanishes silently.
 """
 
+import re
 import runpy
 from pathlib import Path
 
@@ -280,6 +281,23 @@ def p_blocks(p, edition=True):
 
 
 NUMBER_CELL = r"\d{1,2}[.)]?"
+
+# A paragraph's place in the author's numbered outline (Watson's "1. ... 1. ...
+# 1. ..."): p[@rend="levelN"], set in N steps of PARA_STEP em in print (the
+# review's #pad(left: 2.4em)[...]) and the ebook (p.levelN).
+PARA_STEP = 1.2
+LEVEL_RE = re.compile(r"level([1-9])")
+
+
+def para_level(el):
+    """The outline level a paragraph is set at (p[@rend="levelN"]), or 0."""
+    m = LEVEL_RE.fullmatch(el.get("rend") or "")
+    return int(m.group(1)) if m else 0
+
+
+def pad(level):
+    """The review's and the print's wrapper for a paragraph at that level."""
+    return f"#pad(left: {level * PARA_STEP:.1f}em)["
 
 
 def printed_text(el):

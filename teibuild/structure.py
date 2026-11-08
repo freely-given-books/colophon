@@ -20,6 +20,7 @@ from teibuild.tokens import (  # noqa: E402
     relink)
 from teibuild.state import (  # noqa: E402
     EDITION_HEADS,
+    PARA_LEVELS,
     HEAD_MODE,
     LIST_SHAPE,
     MADE_LISTS,
@@ -149,6 +150,21 @@ def apply_edition_heads(log):
         par.children[i:i] = [Tok("atom", el=el), Tok("space", ["\n"])]
         relink(par)
         log.append((f, "heading", "(none)", text))
+
+
+def apply_para_levels(log):
+    """Each paragraph the review sets in by its outline level gets
+    p[@rend="levelN"] (after the splits, so the paragraph is the word's own)."""
+    for tok, lvl, f in PARA_LEVELS:
+        path = path_to(ROOT["toks"], tok) or []
+        p = next((c for c in reversed(path) if c.kind == "container" and local(c.el) == "p"), None)
+        if p is None or (p.el.get("rend") and not layout.LEVEL_RE.fullmatch(p.el.get("rend"))):
+            log.append((f, "skipped", f"level {lvl} at '{tok.orig}'", "not a plain paragraph"))
+            continue
+        if p.el.get("rend") != f"level{lvl}":
+            p.el.set("rend", f"level{lvl}")
+            p.el.set("change", "#review")
+            log.append((f, "level", tok.orig, f"set in at outline level {lvl}"))
 
 
 def path_to(ts, tok, trail=()):

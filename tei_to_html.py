@@ -378,7 +378,9 @@ class HtmlR(R):
         out = []
         for kind, el in p_runs(p, self.layer == "reg"):
             if kind == "text":
-                out += self.para(el)
+                lvl = layout.para_level(p) if self.layer == "reg" else 0
+                out += [s.replace("<p>", f'<p class="level{lvl}">', 1) if lvl else s
+                        for s in self.para(el)]
             elif local(el) == "table":
                 out += self.table_html(el)
             else:
@@ -614,6 +616,8 @@ class HtmlR(R):
                         self.add_block(out, c, f'<p class="quote">{t}</p>')
                 elif t and self.layer == "reg" and c.get("rend") in ("center", "inset"):
                     self.add_block(out, c, f'<p class="{c.get("rend")}">{t}</p>')
+                elif t and self.layer == "reg" and layout.para_level(c):
+                    self.add_block(out, c, f'<p class="level{layout.para_level(c)}">{t}</p>')
                 elif t:
                     self.add_block(out, c, f"<p>{t}</p>")
                 else:

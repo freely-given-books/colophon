@@ -560,6 +560,8 @@ def div_blocks(r, div, level=2, lines=None):
                 t = f"#quote[{t}]"
             if t and r.layer == "reg" and c.get("rend") == "inset":
                 t = f"#block(inset: (x: 1em))[{t}]"      # set off, both sides
+            if t and r.layer == "reg" and layout.para_level(c):
+                t = f"{layout.pad(layout.para_level(c))}{t}]"     # its outline level
             if t and r.layer == "reg" and c.get("rend") == "center" and not \
                     (c.get("prev") and c.get("prev")[1:] not in r.__dict__.get("empty_blocks", ())):
                 t = f"#align(center)[{t}]"      # centered in the source (CCEL)
@@ -791,6 +793,8 @@ def split_p_lines(r, p):
     for kind, el in p_runs(p, r.layer == "reg"):
         if kind == "text":
             t = r.para(el)
+            if t and r.layer == "reg" and layout.para_level(p):
+                t = f"{layout.pad(layout.para_level(p))}{t}]"     # its outline level
             if t:
                 lines += [t, ""]
         elif local(el) == "table":
