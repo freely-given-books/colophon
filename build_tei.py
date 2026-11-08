@@ -49,6 +49,7 @@ from teibuild.align import align  # noqa: E402
 from teibuild.decisions import apply_clusters  # noqa: E402
 from teibuild.structure import (  # noqa: E402
     apply_edition_heads,
+    apply_para_levels,
     apply_list_shape,
     collect_splits,
     restructure)
@@ -158,6 +159,7 @@ def main():
         restructure(all_splits, log)
         ROOT["toks"] = toks
         apply_list_shape(log)
+        apply_para_levels(log)
 
     rebuild(text, toks)
     if S.OPENING_SMALLCAPS:
@@ -232,6 +234,7 @@ def build_layout(args, tree, root, text, toks, files, cfg=None):
         ROOT["toks"] = toks
         apply_list_shape(log)
         apply_edition_heads(log)
+        apply_para_levels(log)
     rebuild(text, toks)
     if S.OPENING_SMALLCAPS:
         opening_smallcaps([f["parts"] for f in files], root,

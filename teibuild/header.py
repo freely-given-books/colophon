@@ -117,6 +117,8 @@ def add_header(root, editor_name):
          "quotation."),
         (".//t:*[@rend='inset']", "@rend='inset': a paragraph or quotation this edition "
          "sets off, indented on both sides."),
+        (".//t:p[@rend='level1']", "p[@rend='levelN']: a paragraph this "
+         "edition sets in by its place in the author's numbered outline (level N)."),
         (".//t:p[@rend='center']", "p[@rend='center']: a paragraph centered in the "
          "source, and in this edition."),
         (".//t:lg[@rend='paragraphs']", "lg[@rend='paragraphs']: verse this edition "

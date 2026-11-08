@@ -39,6 +39,7 @@ when its sections are cut into chapters) is left out of the edition.
 check() lists text that no part covers, so nothing vanishes silently.
 """
 
+import re
 import runpy
 from pathlib import Path
 
@@ -280,6 +281,49 @@ def p_blocks(p, edition=True):
 
 
 NUMBER_CELL = r"\d{1,2}[.)]?"
+
+# A paragraph's place in the author's numbered outline (Watson's "1. ... 1. ...
+# 1. ..."): p[@rend="levelN"], set in N steps of PARA_STEP em in print (the
+# review's #pad(left: 4.0em)[...]) and the ebook (p.levelN).
+PARA_STEP = 2.0
+LEVEL_RE = re.compile(r"level([1-9])")
+
+
+def para_level(el):
+    """The outline level a paragraph is set at (p[@rend="levelN"]), or 0."""
+    m = LEVEL_RE.fullmatch(el.get("rend") or "")
+    return int(m.group(1)) if m else 0
+
+
+def list_level(lst):
+    """The outline level of the paragraph a list belongs to: the one it is
+    printed in, or else the paragraph just before it."""
+    par = lst.getparent()
+    if par is not None and local(par) == "p":
+        return para_level(par)
+    prev = lst.getprevious()
+    while prev is not None and not isinstance(prev.tag, str):
+        prev = prev.getprevious()
+    return para_level(prev) if prev is not None and local(prev) == "p" else 0
+
+
+def after_level(p):
+    """Does a paragraph come straight after one set in by its outline level?"""
+    prev = p.getprevious()
+    while prev is not None and (not isinstance(prev.tag, str) or local(prev) in ("pb", "milestone", "fw", "lb")):
+        prev = prev.getprevious()
+    return prev is not None and local(prev) == "p" and para_level(prev) > 0
+
+
+def pad(level):
+    """The review's and the print's opening for a paragraph at that level: set
+    in, with the first-line indent every paragraph has (closed by PAD_END)."""
+    return f"#pad(left: {level * PARA_STEP:.1f}em)[{PAR_INDENT}["
+
+
+# a paragraph alone in its #pad is the first in it, which Typst does not indent
+PAR_INDENT = "#par(first-line-indent: (amount: 12pt, all: true))"
+PAD_END = "]]"
 
 
 def printed_text(el):

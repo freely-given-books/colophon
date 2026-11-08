@@ -322,8 +322,11 @@ class R:
             if items and items[0].get("n"):
                 args.append(f"start: {items[0].get('n')}")
             if lst.get("style") == "indent":
-                # set in under its point, its numbers past a paragraph's indent
-                args.append(f"indent: {LIST_INDENT}")
+                # set in under its point, its numbers past a paragraph's indent;
+                # under a paragraph at an outline level, one level below it
+                lvl = layout.list_level(lst)
+                args.append(f"indent: {(lvl + 1) * layout.PARA_STEP:.1f}em" if lvl
+                            else f"indent: {LIST_INDENT}")
         if args:
             lines += [ind + "#[", ind + f"#set enum({', '.join(args)})"]
         # a diagram (list/@rend="diagram", DIAGRAM_LISTS: a genealogy printed
@@ -560,6 +563,12 @@ def div_blocks(r, div, level=2, lines=None):
                 t = f"#quote[{t}]"
             if t and r.layer == "reg" and c.get("rend") == "inset":
                 t = f"#block(inset: (x: 1em))[{t}]"      # set off, both sides
+            if t and r.layer == "reg" and layout.para_level(c):
+                t = f"{layout.pad(layout.para_level(c))}{t}{layout.PAD_END}"     # its outline level
+            elif t and r.layer == "reg" and not c.get("rend") and layout.after_level(c):
+                # back at the top level after set-in paragraphs: a paragraph
+                # after a block keeps no indent of its own, so give it one
+                t = f"{layout.PAR_INDENT}[{t}]"
             if t and r.layer == "reg" and c.get("rend") == "center" and not \
                     (c.get("prev") and c.get("prev")[1:] not in r.__dict__.get("empty_blocks", ())):
                 t = f"#align(center)[{t}]"      # centered in the source (CCEL)
@@ -791,6 +800,8 @@ def split_p_lines(r, p):
     for kind, el in p_runs(p, r.layer == "reg"):
         if kind == "text":
             t = r.para(el)
+            if t and r.layer == "reg" and layout.para_level(p):
+                t = f"{layout.pad(layout.para_level(p))}{t}{layout.PAD_END}"     # its outline level
             if t:
                 lines += [t, ""]
         elif local(el) == "table":

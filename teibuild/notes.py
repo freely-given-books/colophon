@@ -19,6 +19,7 @@ from teibuild.settings import XML_NS  # noqa: E402
 from teibuild.tokens import ancestors, contains, relink  # noqa: E402
 from teibuild.state import (  # noqa: E402
     EDITION_HEADS,
+    PARA_LEVELS,
     LIST_SHAPE,
     NOTE_SEQ,
     NO_SPACE_RUN_ON,
@@ -226,6 +227,12 @@ def review_division(d, review, f, log, unresolved):
             p.el.set("rend", "inset")
             p.el.set("change", "#review")
             log.append((f, "inset", owner[jw].orig, "set off, indented both sides"))
+    for j0, lvl in getattr(review, "para_levels", ()):
+        # set in by its place in the outline: applied after the review's
+        # paragraph splits, so each part keeps its own level
+        jw = next((j for j in range(j0 + 1, len(tgt)) if j in owner), None)
+        if jw is not None:
+            PARA_LEVELS.append((owner[jw], lvl, f))
     tflags = {}            # id(tok) -> [(target index, italic flag)]
     for j, tok in owner.items():
         tflags.setdefault(id(tok), []).append((j, review.body[j][2]))

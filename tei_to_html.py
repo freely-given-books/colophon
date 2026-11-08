@@ -322,8 +322,10 @@ class HtmlR(R):
             if not numbered and lst.get("rend") == "diagram" and self.layer == "reg":
                 cls = ' class="diagram"'           # kept whole (ebook.css)
             if lst.get("style") == "indent" and self.layer == "reg":
-                cls = (cls.replace('class="', 'class="indent ') if 'class="' in cls
-                       else cls + ' class="indent"')    # set one step in (ebook.css)
+                lvl = layout.list_level(lst)
+                c = f"level{lvl + 1}" if lvl else "indent"    # one level below its paragraph
+                cls = (cls.replace('class="', f'class="{c} ') if 'class="' in cls
+                       else cls + f' class="{c}"')    # set one step in (ebook.css)
             first = lst.find(T + "item")
             if numbered and first is not None and first.get("n"):
                 cls += f' start="{first.get("n")}"'
@@ -378,7 +380,9 @@ class HtmlR(R):
         out = []
         for kind, el in p_runs(p, self.layer == "reg"):
             if kind == "text":
-                out += self.para(el)
+                lvl = layout.para_level(p) if self.layer == "reg" else 0
+                out += [s.replace("<p>", f'<p class="level{lvl}">', 1) if lvl else s
+                        for s in self.para(el)]
             elif local(el) == "table":
                 out += self.table_html(el)
             else:
@@ -614,6 +618,8 @@ class HtmlR(R):
                         self.add_block(out, c, f'<p class="quote">{t}</p>')
                 elif t and self.layer == "reg" and c.get("rend") in ("center", "inset"):
                     self.add_block(out, c, f'<p class="{c.get("rend")}">{t}</p>')
+                elif t and self.layer == "reg" and layout.para_level(c):
+                    self.add_block(out, c, f'<p class="level{layout.para_level(c)}">{t}</p>')
                 elif t:
                     self.add_block(out, c, f"<p>{t}</p>")
                 else:
