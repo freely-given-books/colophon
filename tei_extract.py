@@ -565,6 +565,10 @@ def div_blocks(r, div, level=2, lines=None):
                 t = f"#block(inset: (x: 1em))[{t}]"      # set off, both sides
             if t and r.layer == "reg" and layout.para_level(c):
                 t = f"{layout.pad(layout.para_level(c))}{t}{layout.PAD_END}"     # its outline level
+            elif t and r.layer == "reg" and not c.get("rend") and layout.after_level(c):
+                # back at the top level after set-in paragraphs: a paragraph
+                # after a block keeps no indent of its own, so give it one
+                t = f"{layout.PAR_INDENT}[{t}]"
             if t and r.layer == "reg" and c.get("rend") == "center" and not \
                     (c.get("prev") and c.get("prev")[1:] not in r.__dict__.get("empty_blocks", ())):
                 t = f"#align(center)[{t}]"      # centered in the source (CCEL)

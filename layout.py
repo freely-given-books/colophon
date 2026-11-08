@@ -307,6 +307,14 @@ def list_level(lst):
     return para_level(prev) if prev is not None and local(prev) == "p" else 0
 
 
+def after_level(p):
+    """Does a paragraph come straight after one set in by its outline level?"""
+    prev = p.getprevious()
+    while prev is not None and (not isinstance(prev.tag, str) or local(prev) in ("pb", "milestone", "fw", "lb")):
+        prev = prev.getprevious()
+    return prev is not None and local(prev) == "p" and para_level(prev) > 0
+
+
 def pad(level):
     """The review's and the print's opening for a paragraph at that level: set
     in, with the first-line indent every paragraph has (closed by PAD_END)."""
