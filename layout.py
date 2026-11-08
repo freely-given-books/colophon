@@ -295,6 +295,18 @@ def para_level(el):
     return int(m.group(1)) if m else 0
 
 
+def list_level(lst):
+    """The outline level of the paragraph a list belongs to: the one it is
+    printed in, or else the paragraph just before it."""
+    par = lst.getparent()
+    if par is not None and local(par) == "p":
+        return para_level(par)
+    prev = lst.getprevious()
+    while prev is not None and not isinstance(prev.tag, str):
+        prev = prev.getprevious()
+    return para_level(prev) if prev is not None and local(prev) == "p" else 0
+
+
 def pad(level):
     """The review's and the print's wrapper for a paragraph at that level."""
     return f"#pad(left: {level * PARA_STEP:.1f}em)["

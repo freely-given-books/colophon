@@ -322,8 +322,10 @@ class HtmlR(R):
             if not numbered and lst.get("rend") == "diagram" and self.layer == "reg":
                 cls = ' class="diagram"'           # kept whole (ebook.css)
             if lst.get("style") == "indent" and self.layer == "reg":
-                cls = (cls.replace('class="', 'class="indent ') if 'class="' in cls
-                       else cls + ' class="indent"')    # set one step in (ebook.css)
+                lvl = layout.list_level(lst)
+                c = f"level{lvl + 1}" if lvl else "indent"    # one level below its paragraph
+                cls = (cls.replace('class="', f'class="{c} ') if 'class="' in cls
+                       else cls + f' class="{c}"')    # set one step in (ebook.css)
             first = lst.find(T + "item")
             if numbered and first is not None and first.get("n"):
                 cls += f' start="{first.get("n")}"'

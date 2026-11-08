@@ -322,8 +322,11 @@ class R:
             if items and items[0].get("n"):
                 args.append(f"start: {items[0].get('n')}")
             if lst.get("style") == "indent":
-                # set in under its point, its numbers past a paragraph's indent
-                args.append(f"indent: {LIST_INDENT}")
+                # set in under its point, its numbers past a paragraph's indent;
+                # under a paragraph at an outline level, one level below it
+                lvl = layout.list_level(lst)
+                args.append(f"indent: {(lvl + 1) * layout.PARA_STEP:.1f}em" if lvl
+                            else f"indent: {LIST_INDENT}")
         if args:
             lines += [ind + "#[", ind + f"#set enum({', '.join(args)})"]
         # a diagram (list/@rend="diagram", DIAGRAM_LISTS: a genealogy printed
