@@ -96,7 +96,7 @@ VLIST = (rf"{NUM}(?:\s?[-–]\s?{NUM})?(?:(?:\s?,\s?|\s(?:and|&)\s){NEXT_BOOK}{N
 # italic holding the reference may close inside the list ("#emph[Gen. 26. 35.
 # &] 27. 46."); a number that a book's name follows is the next reference's
 CLOSE_IN = r"(?(c1)|(?(c2)|(?(open)\]?|(?(nopen)\]?))))"
-ONE = rf"{NUM}(?![\d#]|:\d|(?!ff\b)[a-z])(?:\s?[-–]\s?{NUM}|\.?\s(?:ad\s)?ult(?=\.))?"
+ONE = rf"{NUM}(?!\d|#(?!footnote\b)|:\d|(?!ff\b)[a-z])(?:\s?[-–]\s?{NUM}|\.?\s(?:ad\s)?ult(?=\.))?"
 
 
 def ref_re(stops):
@@ -112,7 +112,8 @@ def ref_re(stops):
         rf"|(?P<open>#emph\[(?P<paren>\()?)?(?P<book>{NAMES_RE}))(?P<stop>\.?)"
         rf"(?(open)(?P<c1>\])?|(?(nopen)(?P<c2>\])?))\s?"
         rf"(?P<ch>{NUM}|{ROMAN})"
-        rf"(?:(?P<sep>\s?[.:,]\s?|\.?\s(?:ver|vers|v)\.\s?)(?P<vs>{ONE}(?:{item})*|ult(?=\.))(?P<ff>ff\b)?)?"
+        rf"(?:(?P<sep>\s?[.:,]\s?|\.?\s(?:ver|vers|v)\.\s?|\s(?=\d{{1,3}}(?:[.,;)]|#footnote\b|$)))"
+        rf"(?P<vs>{ONE}(?:{item})*|ult(?=\.))(?P<ff>ff\b)?)?"
         rf"(?P<more>(?:\s?;\s?(?:{NUM}|{ROMAN})(?:\s?[.:]\s?)(?:{VLIST}))*)"
         rf"(?P<end>\.?)(?!\w|:\w)")
 
