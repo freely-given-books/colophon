@@ -1070,6 +1070,12 @@ def layout_file_lines(r, f, cfg, pre):
             # runs of dash-joined phrases leave justification few breaks)
             lines += ["#block(inset: (x: 1em))[", "  #set par(justify: false)",
                       f"  #text(size: 0.9em)[{t}]", "]", ""]
+        elif t and r.layer == "reg" and f.get("subtitle_rend") == "strong":
+            # a printed chapter title under the edition's heading (Watson's
+            # "Showing that ..."): bold, in a narrower centred column, set off
+            # from the text below; #v is layout, which the review drops
+            lines += ["#align(center)[#block(width: 85%)[", "  #set par(justify: false)",
+                      f"  #strong[{t}]", "]]", "", "#v(0.9em)", ""]
         elif t:
             lines += [f"#align(center)[{t}]" if r.layer == "reg" else t, ""]
     for el in f["parts"]:

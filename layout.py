@@ -17,6 +17,9 @@ the TEI root element and returning a list of files, in reading order:
                                            # arguments), set off as a block indented
                                            # both sides, a size smaller, ragged
                                            # right, not centred
+                                           # "strong": a printed chapter title,
+                                           # bold in a narrower centred column,
+                                           # space after (Watson)
      "part": None,                         # optional: a part heading before this
                                            # file (ebook only; print sets its own)
      "kicker": None,                       # optional: the file's place in the
