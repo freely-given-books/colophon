@@ -284,8 +284,8 @@ NUMBER_CELL = r"\d{1,2}[.)]?"
 
 # A paragraph's place in the author's numbered outline (Watson's "1. ... 1. ...
 # 1. ..."): p[@rend="levelN"], set in N steps of PARA_STEP em in print (the
-# review's #pad(left: 2.4em)[...]) and the ebook (p.levelN).
-PARA_STEP = 1.2
+# review's #pad(left: 4.0em)[...]) and the ebook (p.levelN).
+PARA_STEP = 2.0
 LEVEL_RE = re.compile(r"level([1-9])")
 
 

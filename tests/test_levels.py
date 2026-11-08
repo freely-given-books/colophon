@@ -25,6 +25,6 @@ def test_review_reads_levels():
 
 def test_level_written_back():
     p = etree.fromstring('<p xmlns="http://www.tei-c.org/ns/1.0" rend="level3">x</p>')
-    assert layout.para_level(p) == 3 and layout.pad(3).startswith("#pad(left: 3.6em)[#par(")
+    assert layout.para_level(p) == 3 and layout.pad(3).startswith("#pad(left: 6.0em)[#par(")
     p.set("rend", "inset")
     assert layout.para_level(p) == 0
