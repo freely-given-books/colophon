@@ -375,6 +375,30 @@ the marker's 15.0 cap; `marked` ranks ties by their next-strongest words
 (0.38.1; before, ties kept reading order and the top 15% came from the
 first chapters only).
 
+## Outline levels (`outline.py`)
+
+Authors number points, sub-points and reasons with the same marks at every depth
+(Watson's "1." throughout, Owen's "First, ... Secondly," three or four levels deep), so a
+paragraph's level (`p[@rend="levelN"]`, the review's `#pad`) comes from the counting:
+
+```sh
+./fgb outline BOOK            # the tree; "?" = settle by sense, "*" = announced points
+                              # reopened, "w" = from the later edition's marks
+./fgb outline BOOK --write    # set the levels in chapters/typ, then ./fgb sync, ./fgb check
+```
+
+A 1 opens a level below; any other number carries on the deepest open level whose last
+number comes just before it, preferring the same style (1. / (1.) / [1.] / First). A run of
+short points 1..k reopened one by one ("First, ... Fourthly." then "First, In general ...")
+is opened at its own level, unless its last point announces points of its own ("five chief
+subtleties"). A point opening in small capitals is a main head (top level). Unnumbered
+paragraphs follow the numbered one before them. `source/outline.json` holds what the counting
+cannot settle (`overrides`, `base`, `styles`, `labels`, `printed_heads`) and a `witness`: a
+later edition marking each level differently (Goold's Owen: 1. (1.) [1.] 1st. (1st.)), matched
+paragraph by paragraph, whose mark gives the depth. Checked 2026-11-08: Watson's 269 hand-set
+levels reproduced exactly from his 13 overrides (without them, 2 wrong levels go unflagged);
+Owen's Indwelling Sin with Goold as witness: 201 of 245 points matched, 7 to settle.
+
 ## Rules every book keeps
 
 `rules.py`, run by `verify.py` as step [6] (so by `./fgb check`, CI and the
