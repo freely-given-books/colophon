@@ -229,7 +229,12 @@ within 0.5in of the trim (running heads and page numbers included), and
 the inside margin Lulu's for the page count (0.625in for 61-150 pages, 1in
 for 151-400, 1.125in for 401-600). It also warns when a footnote's text is set on
 another page than its marker (Typst's widow control can carry the marker's
-line over after placing the note; a crowded page can push the note on). Template 0.5.3 puts the running head at
+line over after placing the note; a crowded page can push the note on), and lists
+page-fit faults (`page_layout_faults`, from each line's type size and weight by
+`pdftohtml -xml`): a heading left at a page's foot, alone or with one line of its
+text, and a chapter ending on one to four lines. Those are warnings ("page: ..."),
+not a release gate yet: on 2026-11-08 they found A Divine Cordial p. 126 ("Increasing
+Love to God" over one line) and 2-4 line chapter endings in most books. Template 0.5.3 puts the running head at
 0.5in (top margin 0.9in, bottom 0.6in); 0.5.4 keeps level 3/4 headings with
 their text; the trim is 5.5x8.5 unless a book sets `page-width`/`page-height`.
 A book sets its inside margin in `page-margin`. A cover
