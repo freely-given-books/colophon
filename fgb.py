@@ -621,7 +621,7 @@ def cmd_proof(a):
 
 def cmd_outline(a):
     import outline
-    outline.run(find_book(a.book), a.json, a.write)
+    outline.run(find_book(a.book), a.json, a.write, a.headings)
 
 
 def cmd_gapmark(a):
@@ -872,6 +872,8 @@ def main():
     p.add_argument("book", nargs="?")
     p.add_argument("--json", help="the levels and ambiguous places, as JSON")
     p.add_argument("--write", action="store_true", help="set the paragraphs in, in chapters/typ")
+    p.add_argument("--headings", action="store_true",
+                   help="where edition headings would break the deep outlines into sections")
     p.set_defaults(fn=cmd_outline)
     p = sub.add_parser("find")
     p.add_argument("args", nargs="+", metavar="[BOOK] WORD")

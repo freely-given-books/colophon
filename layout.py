@@ -283,10 +283,23 @@ def p_blocks(p, edition=True):
 NUMBER_CELL = r"\d{1,2}[.)]?"
 
 # A paragraph's place in the author's numbered outline (Watson's "1. ... 1. ...
-# 1. ..."): p[@rend="levelN"], set in N steps of PARA_STEP em in print (the
+# 1. ..."): p[@rend="levelN"], set in level_em(N) em in print (the
 # review's #pad(left: 4.0em)[...]) and the ebook (p.levelN).
 PARA_STEP = 2.0
+# below the third level a smaller step, so a deep outline (Owen's five levels) stays on the
+# page: 2, 4, 6, then 7, 8 em
+DEEP_FROM, DEEP_STEP = 3, 1.0
 LEVEL_RE = re.compile(r"level([1-9])")
+
+
+def level_em(level):
+    """How far a paragraph (or a list) at an outline level is set in, in em."""
+    return PARA_STEP * min(level, DEEP_FROM) + DEEP_STEP * max(0, level - DEEP_FROM)
+
+
+def em_level(em):
+    """The outline level a set-in distance stands for (level_em's inverse)."""
+    return min(range(10), key=lambda k: abs(level_em(k) - em))
 
 
 def para_level(el):
@@ -318,7 +331,7 @@ def after_level(p):
 def pad(level):
     """The review's and the print's opening for a paragraph at that level: set
     in, with the first-line indent every paragraph has (closed by PAD_END)."""
-    return f"#pad(left: {level * PARA_STEP:.1f}em)[{PAR_INDENT}["
+    return f"#pad(left: {level_em(level):.1f}em)[{PAR_INDENT}["
 
 
 # a paragraph alone in its #pad is the first in it, which Typst does not indent

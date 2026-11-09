@@ -37,11 +37,14 @@ The book's source/outline.json (optional) settles what the counting cannot:
      "files": ["chapter-*.typ"]}
 
 an override keyed by the file and the paragraph's first 40 characters gives
-its depth (1 = top); "base" the depth that is level 0 in a file;
+its depth (1 = top), a numbered paragraph's or an unnumbered one's (which the
+paragraphs after it then follow); "base" the depth that is level 0 in a file;
 "printed_heads" the headings that are the print's own (not edition
 headings), which neither anchor nor carry the numbering; "styles" the
 numbering styles to read (default all: digit, paren, bracket, word, roman,
-letter); "labels" the margin labels a number may follow (default any short
+letter); "sections": false counts levels from one base for the whole file
+(Watson's; by default each edition heading starts its own count, from its first
+numbered point); "labels" the margin labels a number may follow (default any short
 italic label); "witness" a later edition in source/ that marks each level
 differently (Goold's Owen: 1. (1.) [1.] 1st. (1st.)): its paragraphs are
 matched to the book's numbered ones in order, and its mark gives the depth
@@ -51,6 +54,10 @@ wherever one matches (marked "w" in the tree); the counting fills the rest.
     ./fgb outline BOOK --json FILE     the levels and the ambiguous places
     ./fgb outline BOOK --write         set the paragraphs in, in chapters/typ
                                        (then ./fgb sync records them)
+    ./fgb outline BOOK --headings      where edition headings (=== lines, the book's
+                                       EDITION_HEADINGS) would break an outline three
+                                       levels deep or more into sections; each heading
+                                       takes the levels above it out of the indent
 """
 
 import json
@@ -62,7 +69,7 @@ import layout
 ORDINAL_WORDS = {
     "first": 1, "firstly": 1, "secondly": 2, "second": 2, "thirdly": 3, "third": 3,
     "fourthly": 4, "fourth": 4, "fifthly": 5, "fifth": 5, "sixthly": 6, "sixth": 6,
-    "seventhly": 7, "seventh": 7, "eighthly": 8, "eighth": 8, "ninthly": 9, "ninth": 9,
+    "seventhly": 7, "seventh": 7, "eighthly": 8, "eightly": 8, "eighth": 8, "ninthly": 9, "ninth": 9,
     "tenthly": 10, "tenth": 10, "eleventhly": 11, "twelfthly": 12,
 }
 ROMAN = {"i": 1, "ii": 2, "iii": 3, "iv": 4, "v": 5, "vi": 6, "vii": 7, "viii": 8,
@@ -85,7 +92,7 @@ def _patterns(LEAD):
     ("digit", re.compile(rf"{LEAD}(\d{{1,2}})(?:st|nd|rd|th|dly|ly)?\\?\.[ ,]")),
     ("paren", re.compile(rf"{LEAD}\\?\((\d{{1,2}})\\?\.?\\?\)\s")),
     ("bracket", re.compile(rf"{LEAD}\\?\[(\d{{1,2}})\\?\.?\\?\]\s")),
-    ("word", re.compile(rf"{LEAD}(?:#\w+\[)?([A-Z][a-z]+ly|First|Second|Third)\b\]?[,.:;▪]?\s",
+    ("word", re.compile(rf"{LEAD}(?:#\w+\[)?([A-Z][a-z]+ly|First|Second|Third)\b\]?[,.:;▪]?\]?\s",
                         re.I)),
     ("roman", re.compile(rf"{LEAD}([IVX]{{1,4}})\\?\.\s")),
     ("letter", re.compile(rf"{LEAD}\\?\(?([a-h])\\?[.)]\s")),
@@ -275,7 +282,12 @@ def infer(name, text, cfg):
         body = strip_pad(block)
         num = number(body, patterns, styles)
         if num is None:
-            rows.append({"line": ln, "numbered": False, "text": body})
+            row = {"line": ln, "numbered": False, "text": body}
+            if f"{name}:{body[:40]}" in overrides:
+                # an unnumbered paragraph set at a depth of its own (Owen's "These then are
+                # the ways ..." summing up a run, back at the level above it)
+                row["depth"] = overrides[f"{name}:{body[:40]}"]
+            rows.append(row)
             continue
         style, n, end = num
         wrank = witness.rank(body, end) if witness else None
@@ -342,23 +354,68 @@ def infer(name, text, cfg):
         rows.append({"line": ln, "numbered": True, "depth": len(stack), "style": style,
                      "n": n, "ambiguous": amb, "retake": retake, "witness": wrank,
                      "key": key, "text": body})
-    # the depth that is level 0: the file's own, else that of paragraphs after edition headings
+    # the depth that is level 0: before the first edition heading the file's own (else that of
+    # the points straight after edition headings, or 1); under each edition heading, the depth
+    # of its first numbered point, so a heading takes the levels above it out of the indent
     base = cfg.get("base", {}).get(name)
     if base is None and witness:
-        base = cfg.get("base", {}).get(name, 1)
+        # the chapter's shallowest point is its top level (a later edition's marks may start
+        # a chapter below its outermost one)
+        base = min((r["depth"] for r in rows if r.get("numbered")), default=1)
     if base is None:
         after = [r["depth"] for a, r in zip(rows, rows[1:])
                  if a.get("heading") and not printed.match(a["text"]) and r.get("numbered")]
         base = min(after, default=1)
-    level = 0
-    for r in rows:
+    sections = cfg.get("sections", True)
+    level, here = 0, base
+    for k, r in enumerate(rows):
         if r.get("heading"):
             level = 0
+            if sections and not printed.match(r["text"]):
+                nxt = next((q for q in rows[k + 1:] if q.get("numbered") or q.get("heading")), None)
+                here = nxt["depth"] if nxt is not None and nxt.get("numbered") else base
         elif r.get("numbered"):
-            r["level"] = level = max(0, r["depth"] - base)
+            r["level"] = level = max(0, r["depth"] - here)
+        elif "depth" in r:
+            r["level"] = level = max(0, r["depth"] - here)
         else:
             r["level"] = level
+    # no level left empty between two others (a later edition can skip one of its marks)
+    used = sorted({r["level"] for r in rows if "level" in r})
+    close = {v: k for k, v in enumerate(used)}
+    for r in rows:
+        if "level" in r:
+            r["level"] = close[r["level"]]
     return rows
+
+
+HEADINGS_FROM = 3     # a file whose levels reach this deep gets edition headings proposed
+HEADED_RUN = 4        # a point headed only when this many paragraphs or more stand under it
+
+
+def propose_headings(rows):
+    """Where edition headings would break a deep outline into sections: the numbered points at
+    the shallowest level that leaves at most HEADINGS_FROM levels under the headings, each
+    with HEADED_RUN paragraphs or more under it, and any shallower point after the first of
+    them (it must not read as part of the section before). [(row, paragraphs under it)]."""
+    levels = [r["level"] for r in rows if "level" in r]
+    if not levels or max(levels) < HEADINGS_FROM:
+        return []
+    at = max(0, max(levels) - (HEADINGS_FROM - 1))
+    paras = [r for r in rows if "level" in r]
+    out, started = [], False
+    for i, r in enumerate(paras):
+        if not r.get("numbered") or r["level"] > at:
+            continue
+        under = 0
+        for q in paras[i + 1:]:
+            if q.get("numbered") and q["level"] <= r["level"]:
+                break
+            under += 1
+        if r["level"] == at and under >= HEADED_RUN or started and r["level"] < at:
+            out.append((r, under))
+            started = True
+    return out
 
 
 def load_cfg(book):
@@ -415,12 +472,15 @@ def main(argv=None):
     ap.add_argument("book")
     ap.add_argument("--json", help="write the levels and ambiguous places to this file")
     ap.add_argument("--write", action="store_true", help="set the paragraphs in, in chapters/typ")
+    ap.add_argument("--headings", action="store_true",
+                    help="where edition headings would break the deep outlines into sections")
     a = ap.parse_args(argv)
-    run(a.book, a.json, a.write)
+    run(a.book, a.json, a.write, a.headings)
 
 
-def run(book, json_out=None, write_files=False):
-    """Print the tree of every file, optionally write the levels as JSON and into chapters/typ."""
+def run(book, json_out=None, write_files=False, headings=False):
+    """Print the tree of every file, optionally write the levels as JSON and into chapters/typ,
+    or list where edition headings would break the deep outlines into sections."""
     cfg = load_cfg(book)
     if cfg.get("witness"):
         # first pass: the outermost mark the witness uses for the book's numbered points
@@ -434,6 +494,11 @@ def run(book, json_out=None, write_files=False):
         rows = infer(f.name, f.read_text(), cfg)
         result[f.name] = rows
         amb += sum(1 for r in rows if r.get("ambiguous"))
+        if headings:
+            for r, under in propose_headings(rows):
+                print(f"{f.name}:{r['line']}  (level {r['level']}, {under} under it)  "
+                      f"{re.sub(r'#\\w+\\[|\\]', '', r['text'])[:80]}")
+            continue
         for line in tree(rows, f.name):
             print(line)
         if write_files:

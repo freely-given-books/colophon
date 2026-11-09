@@ -395,9 +395,14 @@ subtleties"). A point opening in small capitals is a main head (top level). Unnu
 paragraphs follow the numbered one before them. `source/outline.json` holds what the counting
 cannot settle (`overrides`, `base`, `styles`, `labels`, `printed_heads`) and a `witness`: a
 later edition marking each level differently (Goold's Owen: 1. (1.) [1.] 1st. (1st.)), matched
-paragraph by paragraph, whose mark gives the depth. Checked 2026-11-08: Watson's 269 hand-set
+paragraph by paragraph, whose mark gives the depth. Each edition heading (`===`) starts its
+own count from its first point, so headings over a deep outline's parts take levels out of the
+indent (`--headings` proposes places; the editor's rule is at most three levels); an override
+may set an unnumbered paragraph too (Owen's "These then are the ways ..." back a level up).
+Below the third level the step is 1em, not 2 (`layout.level_em`). Checked 2026-11-08: Watson's 269 hand-set
 levels reproduced exactly from his 13 overrides (without them, 2 wrong levels go unflagged);
-Owen's Indwelling Sin with Goold as witness: 201 of 245 points matched, 7 to settle.
+Owen's Indwelling Sin with Goold as witness: 270 points, 8 to settle; with 16 headings in
+Owen's words over chapters 7-10 and 13, every chapter within three levels.
 
 ## Rules every book keeps
 

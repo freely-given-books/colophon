@@ -325,7 +325,7 @@ class R:
                 # set in under its point, its numbers past a paragraph's indent;
                 # under a paragraph at an outline level, one level below it
                 lvl = layout.list_level(lst)
-                args.append(f"indent: {(lvl + 1) * layout.PARA_STEP:.1f}em" if lvl
+                args.append(f"indent: {layout.level_em(lvl + 1):.1f}em" if lvl
                             else f"indent: {LIST_INDENT}")
         if args:
             lines += [ind + "#[", ind + f"#set enum({', '.join(args)})"]

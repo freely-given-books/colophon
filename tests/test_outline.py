@@ -20,6 +20,8 @@ def levels(text, cfg=None):
 def test_numbers_and_styles():
     assert outline.number("1\\. The best things.")[:2] == ("digit", 1)
     assert outline.number("Secondly, It fights.")[:2] == ("word", 2)
+    assert outline.number("#emph[First,] Upon the first Conversion")[:2] == ("word", 1)
+    assert outline.number("#emph[Eightly, Some great sin]")[:2] == ("word", 8)
     assert outline.number("\\(3.\\) Thirdly")[:2] == ("paren", 3)
     assert outline.number("#emph[Answ.] 2. He who")[:2] == ("digit", 2)
     assert outline.number("I am the way.") is None          # the pronoun, not a numeral
@@ -85,3 +87,21 @@ def test_write_sets_paragraphs_in(tmp_path):
     # written twice, it stays the same
     outline.write(f, outline.infer("c.typ", out, {}))
     assert f.read_text() == out
+
+
+def test_heading_takes_levels_out():
+    # under an edition heading, levels count from its first point
+    text = ("== T\n\n1\\. A: two things.\n\n1\\. B: two things.\n\n=== A Section\n\n"
+            "1\\. C: two things.\n\n1\\. D.\n")
+    rows = [r for r in outline.infer("c.typ", text, {"sections": True, "base": {"c.typ": 1}})
+            if r.get("numbered")]
+    assert [r["level"] for r in rows] == [0, 1, 0, 1]
+
+
+def test_unnumbered_override_and_deep_step():
+    text = "== T\n\n1\\. A: two things.\n\n1\\. B.\n\nThese then are the ways.\n\n2\\. C.\n"
+    cfg = {"overrides": {"c.typ:These then are the ways.": 1}}
+    rows = [r for r in outline.infer("c.typ", text, cfg) if "level" in r]
+    assert [r["level"] for r in rows] == [0, 1, 0, 1]
+    assert [layout.level_em(k) for k in range(6)] == [0, 2, 4, 6, 7, 8]
+    assert all(layout.em_level(layout.level_em(k)) == k for k in range(8))
