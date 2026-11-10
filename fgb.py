@@ -27,6 +27,10 @@ works from any folder.
                                   checked EPUB into dist/<author>/<book>/;
                                   no BOOK = every book on the TEI pipeline.
                                   --pdf / --epub for one kind, --out DIR
+  ./fgb outline [BOOK] [--write]  outline levels from the author's numbering
+                                  (and a later edition's marks: outline.json);
+                                  the places to settle marked "?"; --write sets
+                                  the paragraphs in, in chapters/typ
   ./fgb coverage [BOOK]           how faithful the edition is to its source:
                                   words as printed, changed in form, grammar
                                   or wording, gaps restored (coverage.py)
@@ -615,6 +619,11 @@ def cmd_proof(a):
     proofread.main(a, bk.chapters, describe)
 
 
+def cmd_outline(a):
+    import outline
+    outline.run(find_book(a.book), a.json, a.write, a.headings)
+
+
 def cmd_gapmark(a):
     from proof import gapmark
     bk = Book(find_book(a.book))
@@ -858,6 +867,14 @@ def main():
     p.add_argument("--seed", type=int, default=1, help="plant: seed (default 1)")
     p.add_argument("--book", default="a book", help="run: the book, as the prompt names it")
     p.set_defaults(fn=lambda a: __import__("proof.bench", fromlist=["main"]).main(a))
+    p = sub.add_parser("outline", help="outline levels from the author's numbering, the "
+                       "ambiguous places marked; --write sets them in chapters/typ (outline.py)")
+    p.add_argument("book", nargs="?")
+    p.add_argument("--json", help="the levels and ambiguous places, as JSON")
+    p.add_argument("--write", action="store_true", help="set the paragraphs in, in chapters/typ")
+    p.add_argument("--headings", action="store_true",
+                   help="where edition headings would break the deep outlines into sections")
+    p.set_defaults(fn=cmd_outline)
     p = sub.add_parser("find")
     p.add_argument("args", nargs="+", metavar="[BOOK] WORD")
     p.set_defaults(fn=cmd_find)
@@ -865,7 +882,7 @@ def main():
     if a.cmd == "find":
         a.book, a.word = (a.args[0], a.args[1]) if len(a.args) > 1 else (None, a.args[0])
     if a.cmd not in ("list", "find", "release", "coverage", "export", "ocr", "collate", "crops",
-                     "proof", "gapmark", "marked", "proof-bench"):
+                     "proof", "gapmark", "marked", "proof-bench", "outline"):
         # the Typst templates, from the submodule's tags (packages.py)
         try:
             a.packages = packages.setup()

@@ -15,7 +15,7 @@ stripped; backslash escapes are undone.
 
 import re
 
-from layout import PARA_STEP
+from layout import em_level
 
 # Word characters include combining marks (Hebrew points, the TCP macron),
 # so a pointed Hebrew word or "spo̅salibus" stays one token.
@@ -319,7 +319,7 @@ def parse_review(text, inline_headings=False, titled=True, edition_heads=False):
                 r.insets.append(len(r.body))        # set off: p[@rend="inset"]
             m = re.match(r"#pad\(left: ([\d.]+)em\)\[", st)
             if m:                                   # an outline level: p[@rend="levelN"]
-                r.para_levels.append((len(r.body), round(float(m.group(1)) / PARA_STEP)))
+                r.para_levels.append((len(r.body), em_level(float(m.group(1)))))
             r.body.append(("¶", "m", False))
             n = len(r.body)
             _scan_block(r, joined + "\n")
