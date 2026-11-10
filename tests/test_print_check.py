@@ -4,12 +4,18 @@ page's foot, a chapter ending on a few lines.
   uv run --project colophon --group dev pytest colophon/tests
 """
 
+import shutil
 import sys
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import typst  # noqa: E402
 import print_check  # noqa: E402
+
+# the checks read the rendered PDF with poppler's pdftohtml (not on every CI machine)
+pytestmark = pytest.mark.skipif(shutil.which("pdftohtml") is None, reason="needs poppler's pdftohtml")
 
 PARA = "This is an ordinary line of the book's text, long enough to fill the measure well. " * 3
 
