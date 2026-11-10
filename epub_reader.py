@@ -305,7 +305,7 @@ OUTLINE_CSS = r"""
   font:12.5px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif; color:var(--muted);
   white-space:nowrap; overflow:hidden; cursor:pointer; text-align:left; }
 #bar #where.show { display:flex; }
-:root.has-where { scroll-padding-top:5.5rem; }
+html { scroll-padding-top:5.5rem; }   /* room for #where, shown or not */
 #where .c { display:flex; gap:.3em; min-width:0; max-width:18em; flex:0 3 auto; overflow:hidden; }
 #where .c:first-child { flex:none; max-width:none; }
 #where .c:last-child { max-width:none; flex-shrink:1; }
@@ -330,6 +330,14 @@ main p.point.folded .omark.fold { color:var(--accent); }
 .ol-chip { display:block; margin:.25rem 0 .9rem; padding:.2rem .75rem; font:13px system-ui,sans-serif;
   color:var(--accent); background:transparent; border:1px dashed var(--rule); border-radius:14px;
   cursor:pointer; }
+/* the point the map jumps to, lit for a moment */
+@keyframes ol-flash {
+  from { background-color:var(--flash); box-shadow:0 0 0 .4rem var(--flash); }
+  to { background-color:transparent; box-shadow:0 0 0 .4rem transparent; } }
+main p.ol-flash { --flash:color-mix(in srgb, var(--accent) 22%, transparent); border-radius:2px;
+  animation:ol-flash 1.6s ease-out .15s backwards; }
+@media (prefers-reduced-motion: reduce) { main p.ol-flash { animation:none;
+  background-color:var(--flash); box-shadow:0 0 0 .4rem var(--flash); } }
 @media print { #where, .ol-chip { display:none !important; } }
 """
 
@@ -337,7 +345,7 @@ OUTLINE_JS = r"""
 (function () {
   const pts = [...document.querySelectorAll('main p.point')];
   if (!pts.length) return;
-  const root = document.documentElement, KEY = 'fgb:' + BOOK + ':fold';
+  const KEY = 'fgb:' + BOOK + ':fold';
   const $ = s => document.querySelector(s);
   const ORD = /^(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|last)(ly)?\b[,.;:]?\s*/i;
   function words(p) {
@@ -439,8 +447,10 @@ OUTLINE_JS = r"""
   // where the reader is: the headings and points above the line under the bar
   const where = $('#where');
   let visible = seq;
+  // the reader's line: a third of the way down the page below the bar, where the eye
+  // reads, not the bar's edge (a long paragraph would name the point before it)
   function current() {
-    const line = where.getBoundingClientRect().bottom + 12;
+    const top = $('#bar').getBoundingClientRect().bottom, line = top + (innerHeight - top) / 3;
     let lo = 0, hi = visible.length - 1, at = -1;
     while (lo <= hi) { const mid = (lo + hi) >> 1;
       if (visible[mid].el.getBoundingClientRect().top < line) { at = mid; lo = mid + 1; } else hi = mid - 1; }
@@ -451,7 +461,7 @@ OUTLINE_JS = r"""
     ticking = false;
     const s = current();
     here = s;
-    if (!s) { where.classList.remove('show'); root.classList.remove('has-where'); return; }
+    if (!s) { where.classList.remove('show'); return; }
     const chain = [];
     for (let p = s.node; p; p = p.parent) chain.unshift(p);
     const top = s.heads[0], sub = s.heads.length > 1 ? s.heads[s.heads.length - 1] : null;
@@ -459,7 +469,7 @@ OUTLINE_JS = r"""
       (sub ? '<span class="c sub"><span class="lb">' + esc(sub.text) + '</span></span>' : '') +
       chain.map(p => '<span class="c"><span class="m">' + esc(p.mark) + '</span> <span class="lb">' +
                      esc(p.label) + '</span></span>').join('');
-    where.classList.add('show'); root.classList.add('has-where');
+    where.classList.add('show');
   }
   addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(onScroll); } });
   // the map: every chapter's headings and points, the reader's place marked
@@ -470,6 +480,15 @@ OUTLINE_JS = r"""
     if (t === 'outline') drawMap();
   }
   tabs.forEach(b => b.onclick = () => tab(b.dataset.tab));
+  // the point jumped to lit for a moment, so the eye finds it
+  let flashed = null;
+  function flash(el) {
+    if (!el) return;
+    if (flashed) { flashed.classList.remove('ol-flash'); clearTimeout(flashed.flashTimer); }
+    void el.offsetWidth;          // the animation starts again on the same point
+    el.classList.add('ol-flash'); flashed = el;
+    el.flashTimer = setTimeout(() => el.classList.remove('ol-flash'), 2200);
+  }
   function drawMap() {
     const up = new Set();
     for (let p = here && here.node; p; p = p.parent) up.add(p);
@@ -487,7 +506,10 @@ OUTLINE_JS = r"""
         '><span class="m">' + esc(nd.mark) + '</span>' + esc(nd.label) + '</a>';
     });
     map.innerHTML = out;
-    map.querySelectorAll('a').forEach(a => a.addEventListener('click', () => $('#close-toc').click()));
+    map.querySelectorAll('a').forEach(a => a.addEventListener('click', () => {
+      $('#close-toc').click();
+      flash(document.getElementById(a.getAttribute('href').slice(1)));
+    }));
     const h = map.querySelector('a.here') || map.querySelector('a.up');
     if (h) h.scrollIntoView({ block: 'center' });
   }
