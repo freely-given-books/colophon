@@ -633,6 +633,13 @@ def div_blocks(r, div, level=2, lines=None):
                 sig = [True]
                 signature_block(r, lines, None, collapse(r.inline(before)).strip(), sig)
                 signature_block(r, lines, None, collapse(r.node(last)).strip(), sig)
+            elif r.layer == "reg" and getattr(r, "settings", {}).get("SIGNATURE_NAME_LINE") and \
+                    (m := layout.SIGNATURE_NAME.match(r.para(signed))):
+                # SIGNATURE_NAME_LINE: a valediction ending in the name in capitals
+                # ("... Devotion. THOMAS WATSON."): the name a line of its own
+                sig = [True]
+                signature_block(r, lines, None, m.group(1), sig)
+                signature_block(r, lines, None, m.group(2), sig)
             elif r.layer == "reg":
                 signature_block(r, lines, signed, r.para(signed), [True])
             else:
@@ -1024,7 +1031,7 @@ def book_settings(tei_path):
     ns = runpy.run_path(str(ed)) if ed.exists() else {}
     return {k: ns[k] for k in ("TYPST_PREAMBLE", "TYPST_HEADING", "TYPST_ENUM",
                                "TYPST_NUMBERED_PARAGRAPHS", "VERSE_LINEBREAKS", "SMALLCAPS",
-                               "CLOSER_PLAIN", "SPEECH_BLOCKS", "STANZA_BLOCKS",
+                               "CLOSER_PLAIN", "SPEECH_BLOCKS", "STANZA_BLOCKS", "SIGNATURE_NAME_LINE",
                                "RUN_IN_PLAIN")
             if k in ns}
 

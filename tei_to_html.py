@@ -744,6 +744,11 @@ class HtmlR(R):
                     else:
                         out.append(f'<p class="closer">{self.text(before)}</p>')
                         out.append(f'<p class="signature">{right}</p>')
+                elif self.layer == "reg" and getattr(self, "settings", {}).get("SIGNATURE_NAME_LINE") and \
+                        (m := layout.SIGNATURE_NAME.match(self.text(signed))):
+                    sig = [True]       # the name in capitals a line of its own
+                    self.signature(out, None, m.group(1), sig)
+                    self.signature(out, None, m.group(2), sig)
                 elif self.layer == "reg":
                     self.signature(out, signed, self.text(signed), [True])
                 else:
@@ -847,6 +852,8 @@ def divisions(root, r, cfg=None, only=None):
         r.settings = dict(getattr(r, "settings", {}), SMALLCAPS=cfg["SMALLCAPS"])
     if (cfg or {}).get("CLOSER_PLAIN"):
         r.settings = dict(getattr(r, "settings", {}), CLOSER_PLAIN=True)
+    if (cfg or {}).get("SIGNATURE_NAME_LINE"):
+        r.settings = dict(getattr(r, "settings", {}), SIGNATURE_NAME_LINE=True)
     if (cfg or {}).get("SPEECH_BLOCKS"):
         r.settings = dict(getattr(r, "settings", {}), SPEECH_BLOCKS=True)
     if (cfg or {}).get("RUN_IN_PLAIN"):
