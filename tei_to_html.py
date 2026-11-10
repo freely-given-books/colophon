@@ -49,6 +49,7 @@ def join_run_on(out):
         res.append(h)
     return res
 import layout
+import outline
 
 GREEK = "Ͱ-Ͽἀ-῿"
 HEBREW = "֐-׿"
@@ -133,6 +134,11 @@ BLOCK_TAG = re.compile(r"<(p|li|h[1-6]|blockquote|div|aside|section|td|th)[\s>/]
 # list/@rend (a Typst numbering pattern) as an HTML <ol type>
 OL_TYPE = {"1.": "1", "1)": "1", "I.": "I", "i.": "i", "i)": "i",
            "A.": "A", "a.": "a", "a)": "a"}
+
+
+# OUTLINE_MARKS: a paragraph's opening ordinal (after any inline tags) and its marks by level
+POINT_OPENING = re.compile(r"((?:<[^>]+>)*)([A-Za-z]+)[,.:;]")
+POINT_MARKS = ["{n}.", "({n}.)", "[{n}.]", "{n}{s}.", "({n}{s}.)"]
 
 
 class HtmlR(R):
@@ -463,7 +469,29 @@ class HtmlR(R):
     verse_linebreaks = False   # VERSE_LINEBREAKS: verse lines broken as printed
     quote_block = False       # QUOTE_BLOCK: the print template sets #quote as a
                               # block (no marks); else as an inline quotation
+    outline_marks = False     # OUTLINE_MARKS: outline levels set full width, each
+                              # numbered point marked by its level (mark_point)
     run_in = set()
+
+    def mark_point(self, el, t):
+        """OUTLINE_MARKS: a reg paragraph's class and text, its outline level set full
+        width and, when it opens with an ordinal word ("First,", "Secondly,"), a mark
+        before it naming its level (POINT_MARKS: 1. (1.) [1.] 1st. (1st.), as Goold
+        marked Owen), the ordinal in small capitals at the top level. The print sets
+        the same (scripts/outline_marks.typ in the books repository)."""
+        lvl = layout.para_level(el) or 0
+        m = POINT_OPENING.match(t)
+        key = m.group(2).lower() if m else None
+        if key not in outline.ORDINAL_WORDS and key != "lastly":
+            return None, t
+        k = min(lvl, len(POINT_MARKS) - 1)
+        counts = self.point_counts
+        n = counts[k] + 1 if key == "lastly" else outline.ORDINAL_WORDS[key]
+        counts[k:] = [n] + [0] * (len(counts) - k - 1)
+        sfx = "th" if n % 100 in (11, 12, 13) else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+        word = f'<span class="smallcaps">{m.group(2)}</span>' if lvl == 0 else m.group(2)
+        return (f"point point{k}", f'<span class="omark">{POINT_MARKS[k].format(n=n, s=sfx)}</span> '
+                f"{m.group(1)}{word}{t[m.end(2):]}")
 
     def div_html(self, div, level):
         """Layout mode: a division's heads (h{level+1}, or a bold run-in
@@ -618,6 +646,9 @@ class HtmlR(R):
                         self.add_block(out, c, f'<p class="quote">{t}</p>')
                 elif t and self.layer == "reg" and c.get("rend") in ("center", "inset"):
                     self.add_block(out, c, f'<p class="{c.get("rend")}">{t}</p>')
+                elif t and self.layer == "reg" and self.outline_marks:
+                    cls, t = self.mark_point(c, t)
+                    self.add_block(out, c, f'<p class="{cls}">{t}</p>' if cls else f"<p>{t}</p>")
                 elif t and self.layer == "reg" and layout.para_level(c):
                     self.add_block(out, c, f'<p class="level{layout.para_level(c)}">{t}</p>')
                 elif t:
@@ -788,6 +819,8 @@ def divisions(root, r, cfg=None, only=None):
         files = [f for f in files if f["file"].startswith(tuple(only))]
     r.enum = (cfg or {}).get("TYPST_ENUM", "I.")
     r.quote_block = (cfg or {}).get("QUOTE_BLOCK", False)
+    r.outline_marks = (cfg or {}).get("OUTLINE_MARKS", False)
+    r.point_counts = [0] * len(POINT_MARKS)
     r.verse_linebreaks = (cfg or {}).get("VERSE_LINEBREAKS", False)
     if (cfg or {}).get("SMALLCAPS"):
         r.settings = dict(getattr(r, "settings", {}), SMALLCAPS=cfg["SMALLCAPS"])
