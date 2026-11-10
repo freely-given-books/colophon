@@ -136,6 +136,10 @@ def verse_division(el):
     return _VERSE[div]
 
 
+# a valediction that ends in the signer's name in capitals: "... Devotion. THOMAS WATSON."
+SIGNATURE_NAME = re.compile(r"^(.*?[.,;:])\s+([A-Z][A-Z.'’]+(?:\s+[A-Z][A-Z.'’]+)*\.?)$", re.S)
+
+
 def closer_lines(closer, layer="reg"):
     """A closer with a place and date (dateline) or several signatories (a
     list in signed), as one block per line: in the edition the signatories,
