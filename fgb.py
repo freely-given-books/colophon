@@ -567,6 +567,9 @@ def lulu_check(pdf):
     print(f"lulu: {summary}")
     for p in problems:
         print(f"lulu: WARNING {p}")
+    # page-fit faults: listed for the eye, not (yet) a release gate
+    for p in print_check.page_layout_faults(pdf):
+        print(f"page: {p}")
     return problems
 
 

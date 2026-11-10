@@ -18,7 +18,8 @@ nearest the spine (rectos: page 1, 3, ...; the left edge), which a line of
 hanging punctuation does not move. It also warns when a footnote's text is
 set on another page than its marker (Typst's widow control can carry the
 marker's line over after the note is placed). Exit code 1 when a rule is
-broken.
+broken. Page-fit faults (a heading left at a page's foot, a chapter ending on one
+to four lines) are listed as warnings ("~"), outside the release gate for now.
 """
 
 import re
@@ -178,6 +179,98 @@ def split_footnotes(pdf):
     return out
 
 
+def styled_lines(pdf):
+    """[[{top, left, right, size, bold, text}, ...] per page]: the rendered lines with their
+    type size and weight (pdftohtml -xml), in reading order, in points."""
+    xml = subprocess.run(["pdftohtml", "-xml", "-i", "-stdout", "-q", str(pdf)],
+                         capture_output=True, text=True, check=True).stdout
+    fonts = {m.group(1): (float(m.group(2)), bool(re.search(r"Bold|Semibold", m.group(3))))
+             for m in re.finditer(r'<fontspec id="(\d+)" size="([\d.]+)" family="([^"]*)"', xml)}
+    pages = []
+    for m in re.finditer(r"<page [^>]*>(.*?)</page>", xml, re.S):
+        spans = []
+        for t in re.finditer(r'<text top="(\d+)" left="(\d+)" width="(\d+)" height="(\d+)" '
+                             r'font="(\d+)">(.*?)</text>', m.group(1), re.S):
+            text = re.sub(r"<[^>]+>", "", t.group(6)).strip()
+            if text:
+                size, bold = fonts.get(t.group(5), (0, False))
+                spans.append((int(t.group(1)), int(t.group(2)), int(t.group(2)) + int(t.group(3)),
+                              size, bold, text))
+        lines = []
+        for sp in sorted(spans):
+            if lines and abs(lines[-1]["top"] - sp[0]) <= 3:
+                ln = lines[-1]
+                ln["left"], ln["right"] = min(ln["left"], sp[1]), max(ln["right"], sp[2])
+                ln["size"] = max(ln["size"], sp[3])
+                ln["bold"] = ln["bold"] and (sp[4] or not re.search(r"\w", sp[5]))
+                ln["text"] += " " + sp[5]
+            else:
+                lines.append({"top": sp[0], "left": sp[1], "right": sp[2], "size": sp[3],
+                              "bold": sp[4], "text": sp[5]})
+        pages.append(sorted(lines, key=lambda l: (l["top"], l["left"])))
+    return pages
+
+
+def page_layout_faults(pdf):
+    """Page-fit faults a reader notices, which the template's rules do not always prevent:
+    a heading left at the foot of a page (alone, or with one line of its text under it), and
+    a chapter whose last page holds only one to four lines. [message, ...]."""
+    pages = styled_lines(pdf)
+    sizes = {}
+    for pg in pages:
+        for ln in pg:
+            sizes[ln["size"]] = sizes.get(ln["size"], 0) + len(ln["text"])
+    if not sizes:
+        return []
+    body = max(sizes, key=sizes.get)
+    widths = sorted(ln["right"] - ln["left"] for pg in pages for ln in pg if abs(ln["size"] - body) < 0.5)
+    measure = widths[int(len(widths) * 0.9)] if widths else 0     # a full line
+
+    def kind(ln, pg):
+        if ln is pg[0] and ln["size"] < body - 0.5 or re.fullmatch(r"\d+|[ivxlc]+", ln["text"]):
+            return "furniture"                  # running head, page number
+        if ln["size"] < body - 0.5:
+            return "note"
+        if ln["size"] > body + 1 or ln["bold"] and ln["right"] - ln["left"] < 0.8 * measure:
+            return "heading"                    # (a full line in bold is text set bold)
+        return "text"
+
+    marked = [[(kind(ln, pg), ln) for ln in pg] for pg in pages]
+    # a chapter opens with a heading at the top of its page, in the size that most often
+    # opens a page (the title page's larger type is only once)
+    tops = {}
+    for pg in marked:
+        for k, ln in pg[:3]:
+            if k == "heading" and ln["size"] > body + 1:
+                tops[ln["size"]] = tops.get(ln["size"], 0) + 1
+    if not tops:
+        return []
+    chapter = max(tops, key=lambda z: (tops[z], z))
+    starts = [i for i, pg in enumerate(marked)
+              if any(k == "heading" and abs(ln["size"] - chapter) < 0.5 for k, ln in pg[:3])]
+    out = []
+    for i, pg in enumerate(marked):
+        if not starts or i < starts[0]:
+            continue                            # the front matter: title page, contents
+        content = [(k, ln) for k, ln in pg if k in ("text", "heading")]
+        if not content or all(k == "heading" for k, _ in content):
+            continue                            # a part page, a title page
+        tail = [k for k, _ in content[-2:]]
+        if tail[-1] == "heading" or tail == ["heading", "text"] and len(content) > 2:
+            head = next(ln for k, ln in reversed(content) if k == "heading")
+            out.append(f"a heading is left at the foot of page {i + 1}: “{head['text'][:50]}”")
+    for s in starts:
+        p = s - 1
+        while p >= 0 and not any(k == "text" for k, _ in marked[p]):
+            p -= 1
+        if p < 0 or p in starts or p < starts[0]:
+            continue
+        n = sum(1 for k, _ in marked[p] if k == "text")
+        if 1 <= n <= 4:
+            out.append(f"a chapter ends on page {p + 1} with {n} line(s)")
+    return out
+
+
 def check(pdf):
     """(problems, summary) for one PDF."""
     pages = pages_of(pdf)
@@ -223,6 +316,8 @@ def main():
         print(f"{pdf}: {summary}")
         for p in problems:
             print(f"  ! {p}")
+        for p in page_layout_faults(pdf):
+            print(f"  ~ {p}")
         bad |= bool(problems)
     sys.exit(1 if bad else 0)
 
