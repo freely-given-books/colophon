@@ -210,6 +210,23 @@ unverified tags, into `stable-trial`). It pushes nothing. Two builds of a
 book have the same text but not the same bytes yet: the PDF's creation date
 and the EPUB's `dcterms:modified` and zip times differ.
 
+**Print volumes** (colophon 0.43.0; first: Owen on Sin, 2026-11-10): a paperback made of
+other books' editions, each still its own book with its own TEI, ebook and sign-off. Its
+folder has no `source/`, only its print and cover files and a `volume.toml` (`title`,
+`author`, `books` as `<author>/<book>`, optional `print`/`covers`); its print file
+`#include`s the books' `chapters/typ`, and nothing of another book's folder
+(`fgb.volume_problems`). `./fgb build`/`pdf` make its PDFs and covers with the usual Lulu and
+page checks, no TEI or EPUB. In `./fgb release` it is a book with gates record, clean and
+print; its `RELEASE.toml` has a `summary` and one `[[book]]` (`book`, `version`) per book,
+which `./fgb release record VOLUME` writes from each book's newest sign-off (and again after
+one is re-signed). It can be signed only when each named version is its book's newest,
+unchanged since; the tag message says what it was made from ("Made from: Of Temptation v2
+(john-owen/of-temptation/v2); ..."), and a book changed since the version named holds the
+volume back (its files are listed as the volume's changes) and a release carries the volume
+from its tag. No point versions (no ebook). In `stable` a carried volume's folder is as
+tagged but its books' folders are as released, so a reader building it from `stable` after
+a book was re-signed gets the newer chapters; the release's PDFs are built from the tag.
+
 `./fgb coverage [BOOK]` (`coverage.py`) counts, from the TEI, how faithful an
 edition is to its source: printed words (in the divisions it keeps, not
 `SKIP_DIVISIONS`), the share left as printed, words changed in form
