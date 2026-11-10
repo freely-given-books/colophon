@@ -296,7 +296,211 @@ JS = r"""
 """
 
 
+# the outline (a book with OUTLINE_MARKS: its numbered points are p.point<depth>,
+# depth 0 the top): where the reader is in it, a map of it, and folding
+OUTLINE_CSS = r"""
+#bar { flex-wrap:wrap; }
+#bar #where { flex-basis:100%; display:none; gap:.35rem; align-items:baseline; width:100%; margin:0;
+  padding:.15rem max(0px, calc((100% - 36rem) / 2)) 0;   /* in line with the text (main's 36em) */ border:0; background:none;
+  font:12.5px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif; color:var(--muted);
+  white-space:nowrap; overflow:hidden; cursor:pointer; text-align:left; }
+#bar #where.show { display:flex; }
+:root.has-where { scroll-padding-top:5.5rem; }
+#where .c { display:flex; gap:.3em; min-width:0; max-width:18em; flex:0 3 auto; overflow:hidden; }
+#where .c:first-child { flex:none; max-width:none; }
+#where .c:last-child { max-width:none; flex-shrink:1; }
+#where .c + .c::before { content:"›"; flex:none; margin-right:.05rem; color:var(--rule); }
+#where .m { flex:none; color:var(--fg); font-weight:600; }
+#where .lb { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+@media (max-width:600px) { #where .c:not(:last-child) .lb, #where .c.sub { display:none; }
+  #where .c:not(:last-child) { flex:none; } }
+#toc .tabs { display:flex; gap:.2rem; }
+#toc .tabs button { font:inherit; letter-spacing:inherit; text-transform:inherit; color:var(--muted);
+  border:0; border-bottom:2px solid transparent; background:none; padding:.2rem .3rem; cursor:pointer; }
+#toc .tabs button[aria-selected="true"] { color:var(--fg); border-bottom-color:var(--accent); }
+#outline .ch { font-weight:600; margin:1.1rem 0 .2rem; }
+#outline .hd { font-style:italic; color:var(--muted); margin:.6rem 0 .1rem; padding-left:.4rem; }
+#outline a { padding-top:.15rem; padding-bottom:.15rem; font-size:.93em; }
+#outline a .m { font-weight:600; margin-right:.3em; }
+#outline a.up { background:color-mix(in srgb, var(--rule) 15%, transparent); }
+@media screen { .ol-hid { display:none !important; } }
+main p.point .omark.fold { cursor:pointer; border-radius:4px; padding:0 .1em; margin:0 -.1em; }
+main p.point .omark.fold:hover { background:color-mix(in srgb, var(--rule) 35%, transparent); }
+main p.point.folded .omark.fold { color:var(--accent); }
+.ol-chip { display:block; margin:.25rem 0 .9rem; padding:.2rem .75rem; font:13px system-ui,sans-serif;
+  color:var(--accent); background:transparent; border:1px dashed var(--rule); border-radius:14px;
+  cursor:pointer; }
+@media print { #where, .ol-chip { display:none !important; } }
+"""
+
+OUTLINE_JS = r"""
+(function () {
+  const pts = [...document.querySelectorAll('main p.point')];
+  if (!pts.length) return;
+  const root = document.documentElement, KEY = 'fgb:' + BOOK + ':fold';
+  const $ = s => document.querySelector(s);
+  const ORD = /^(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|last)(ly)?\b[,.;:]?\s*/i;
+  function words(p) {
+    const c = p.cloneNode(true);
+    c.querySelectorAll('.omark, a.noteref, sup').forEach(x => x.remove());
+    return c.textContent.replace(/\s+/g, ' ').trim();
+  }
+  function label(t) {
+    t = t.replace(ORD, '');
+    const m = t.match(/^(.{12,80}?)[.;:?!](\s|$)/);
+    let s = m ? m[1] : t;
+    if (s.length > 72) s = s.slice(0, 72).replace(/\s+\S*$/, '') + '…';
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+  const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  // the tree: each point owns the paragraphs after it up to the next point or heading,
+  // but for one the edition sets back at a level above (data-level)
+  const nodes = [], seq = [], owner = new Map();
+  let n = 0;
+  document.querySelectorAll('main > section').forEach(sec => {
+    let stack = [], heads = [];
+    for (const el of sec.children) {
+      const h = /^H([1-6])$/.exec(el.tagName);
+      if (h) {
+        const lv = +h[1];
+        heads = heads.filter(x => x.lv < lv).concat([{ lv, text: el.textContent.trim(), el }]);
+        stack = [];
+        seq.push({ el, heads, node: null });
+      } else if (el.matches('p.point')) {
+        const depth = +((/\bpoint(\d)\b/.exec(el.className) || [0, 0])[1]);
+        while (stack.length && stack[stack.length - 1].depth >= depth) stack.pop();
+        const om = el.querySelector('.omark'), t = words(el);
+        const mark = om ? om.textContent.trim() : ((ORD.exec(t) || [''])[0].replace(/[,.;:\s]+$/, ''));
+        const node = { el, depth, lvl: +(el.dataset.level || depth), mark, label: label(t), parent: stack[stack.length - 1] || null,
+                       kids: [], body: [], heads, folded: false, chip: null, om };
+        if (node.parent) node.parent.kids.push(node);
+        if (!el.id) el.id = 'pt-' + (++n);
+        stack.push(node); nodes.push(node); seq.push({ el, heads, node });
+      } else if (stack.length && !el.matches('aside, [id^="page-"]')) {
+        if (el.dataset.level) while (stack.length > 1 && stack[stack.length - 1].lvl > +el.dataset.level) stack.pop();
+        stack[stack.length - 1].body.push(el); owner.set(el, stack[stack.length - 1]);
+      }
+    }
+  });
+  // folding: a folded point keeps its own paragraphs; its points, and theirs, wait
+  // behind a chip where the first of them was (never text at the point's own level)
+  const count = nd => nd.kids.reduce((a, k) => { const c = count(k); return [a[0] + 1 + c[0], a[1] + 1 + k.body.length + c[1]]; },
+                                     [0, 0]);
+  nodes.forEach(nd => {
+    if (!nd.kids.length) return;
+    const [k, p] = count(nd), b = document.createElement('button');
+    b.className = 'ol-chip';
+    b.textContent = '▸ ' + k + (k === 1 ? ' point' : ' points') + (p > k ? ', ' + p + ' paragraphs' : '');
+    b.onclick = () => { nd.folded = false; apply(); };
+    nd.kids[0].el.before(b); nd.chip = b;
+    if (nd.om) { nd.om.classList.add('fold'); nd.om.title = 'Fold or open this point';
+      nd.om.onclick = () => { nd.folded = !nd.folded; apply(); }; }
+  });
+  function apply() {
+    nodes.forEach(nd => {
+      const gone = !!nd.parent && (nd.parent.gone || nd.parent.folded);
+      nd.gone = gone;
+      nd.el.classList.toggle('ol-hid', gone);
+      nd.el.classList.toggle('folded', nd.folded && !!nd.chip);
+      nd.body.forEach(el => el.classList.toggle('ol-hid', gone));
+      if (nd.chip) nd.chip.classList.toggle('ol-hid', gone || !nd.folded);
+    });
+    visible = seq.filter(s => !s.node || !s.node.gone);
+    onScroll();
+  }
+  let level = 0;
+  try { level = +JSON.parse(localStorage.getItem(KEY)) || 0; } catch (e) {}
+  function setLevel(l) {
+    level = l;
+    try { localStorage.setItem(KEY, JSON.stringify(l)); } catch (e) {}
+    nodes.forEach(nd => nd.folded = !!l && nd.depth === l - 1);
+    document.querySelectorAll('[data-fold-btn]').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.foldBtn === l)));
+    apply();
+  }
+  document.querySelectorAll('[data-fold-btn]').forEach(b => b.onclick = () => {
+    const el = current() && current().el, y = el && el.getBoundingClientRect().top;
+    setLevel(+b.dataset.foldBtn);
+    if (el && !el.classList.contains('ol-hid')) scrollBy(0, el.getBoundingClientRect().top - y);
+  });
+  // a place the reader goes to (a note, a contents or outline link) is opened first
+  function reveal(el) {
+    let nd = owner.get(el) || nodes.find(x => x.el === el);
+    if (!nd) return;
+    for (let p = nd.parent; p; p = p.parent) p.folded = false;
+    apply();
+  }
+  document.addEventListener('click', e => {
+    const a = e.target.closest('a[href^="#"]');
+    if (a && a.getAttribute('href').length > 1) {
+      const t = document.getElementById(a.getAttribute('href').slice(1));
+      if (t) reveal(t.closest('main > section > *') || t);
+    }
+  }, true);
+  // where the reader is: the headings and points above the line under the bar
+  const where = $('#where');
+  let visible = seq;
+  function current() {
+    const line = where.getBoundingClientRect().bottom + 12;
+    let lo = 0, hi = visible.length - 1, at = -1;
+    while (lo <= hi) { const mid = (lo + hi) >> 1;
+      if (visible[mid].el.getBoundingClientRect().top < line) { at = mid; lo = mid + 1; } else hi = mid - 1; }
+    return at < 0 ? null : visible[at];
+  }
+  let ticking = false, here = null;
+  function onScroll() {
+    ticking = false;
+    const s = current();
+    here = s;
+    if (!s) { where.classList.remove('show'); root.classList.remove('has-where'); return; }
+    const chain = [];
+    for (let p = s.node; p; p = p.parent) chain.unshift(p);
+    const top = s.heads[0], sub = s.heads.length > 1 ? s.heads[s.heads.length - 1] : null;
+    where.innerHTML = (top ? '<span class="c"><span class="m">' + esc(top.text) + '</span></span>' : '') +
+      (sub ? '<span class="c sub"><span class="lb">' + esc(sub.text) + '</span></span>' : '') +
+      chain.map(p => '<span class="c"><span class="m">' + esc(p.mark) + '</span> <span class="lb">' +
+                     esc(p.label) + '</span></span>').join('');
+    where.classList.add('show'); root.classList.add('has-where');
+  }
+  addEventListener('scroll', () => { if (!ticking) { ticking = true; requestAnimationFrame(onScroll); } });
+  // the map: every chapter's headings and points, the reader's place marked
+  const list = $('#toc-list'), map = $('#outline'), tabs = document.querySelectorAll('#toc [data-tab]');
+  function tab(t) {
+    tabs.forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === t)));
+    list.hidden = t !== 'contents'; map.hidden = t !== 'outline';
+    if (t === 'outline') drawMap();
+  }
+  tabs.forEach(b => b.onclick = () => tab(b.dataset.tab));
+  function drawMap() {
+    const up = new Set();
+    for (let p = here && here.node; p; p = p.parent) up.add(p);
+    let out = '';
+    seq.forEach(s => {
+      if (!s.node) {
+        const lv = s.heads[s.heads.length - 1];
+        if (s.heads.length === 1) out += '<div class="ch">' + esc(lv.text) + '</div>';
+        else if (seq.some(x => x.node && x.heads.includes(lv))) out += '<div class="hd">' + esc(lv.text) + '</div>';
+        return;
+      }
+      const nd = s.node;
+      out += '<a href="#' + nd.el.id + '" style="padding-left:' + (0.4 + nd.depth * 1.1) + 'rem"' +
+        (here && here.node === nd ? ' class="here"' : up.has(nd) ? ' class="up"' : '') +
+        '><span class="m">' + esc(nd.mark) + '</span>' + esc(nd.label) + '</a>';
+    });
+    map.innerHTML = out;
+    map.querySelectorAll('a').forEach(a => a.addEventListener('click', () => $('#close-toc').click()));
+    const h = map.querySelector('a.here') || map.querySelector('a.up');
+    if (h) h.scrollIntoView({ block: 'center' });
+  }
+  $('#open-toc').addEventListener('click', () => tab('contents'));
+  where.onclick = () => { $('#open-toc').click(); tab('outline'); };
+  setLevel(level);
+  if (location.hash) { const t = document.getElementById(location.hash.slice(1)); if (t) reveal(t.closest('main > section > *') || t); }
+})();
+"""
+
+
 def page(book, body, toc, a):
+    outline = 'class="point ' in body
     links = []
     if a.compare:
         links.append(f'<a class="btn" href="{html.escape(a.compare)}" title="The printed text beside this edition">Compare</a>')
@@ -312,33 +516,44 @@ def page(book, body, toc, a):
     enhancer = ("" if a.bible == "none" else
                 f'\n<script type="module" crossorigin src="https://collection.fetch.bible/enhance.js" '
                 f'data-trans="{html.escape(a.bible)}"></script>')
+    # the outline: where the reader is under the bar, its map beside the contents,
+    # and how deep the points are shown
+    where = ('\n<button id="where" aria-label="Where you are in the outline; open the outline"></button>'
+             if outline else "")
+    tabs = ('<span class="tabs" role="tablist"><button data-tab="contents" aria-selected="true">Contents</button>'
+            '<button data-tab="outline" aria-selected="false">Outline</button></span>' if outline else "Contents")
+    toc_body = (f'<div id="toc-list">{toc}</div><div id="outline" hidden></div>' if outline else toc)
+    fold = ('\n<div class="lab">Outline levels shown</div>\n<div class="row"><div class="seg" style="flex:1">'
+            '<button data-fold-btn="0">All</button><button data-fold-btn="3">3</button>'
+            '<button data-fold-btn="2">2</button><button data-fold-btn="1">1</button></div></div>'
+            if outline else "")
     return f"""<!doctype html>
 <html lang="{html.escape(book['lang'])}"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title} — {author}</title>
 <meta name="generator" content="colophon epub_reader.py">{enhancer}
 <style>{css}</style>
-<style>{CSS}</style>
+<style>{CSS}</style>{f"<style>{OUTLINE_CSS}</style>" if outline else ""}
 </head><body>
 <div id="progress"></div>
 <header id="bar">
 <button id="open-toc" aria-label="Contents">☰ Contents</button>
 <div class="t"><b>{title}</b> · {author}{ver}</div>
 <span class="links">{''.join(links)}</span>
-<button id="open-settings" aria-label="Reading settings">Aa</button>
+<button id="open-settings" aria-label="Reading settings">Aa</button>{where}
 </header>
-<nav id="toc" aria-label="Contents"><h2>Contents <button id="close-toc" aria-label="Close">×</button></h2>{toc}</nav>
+<nav id="toc" aria-label="Contents"><h2>{tabs} <button id="close-toc" aria-label="Close">×</button></h2>{toc_body}</nav>
 <div id="settings" role="dialog" aria-label="Reading settings">
 <div class="lab">Text size</div>
 <div class="row"><div class="seg" style="flex:1"><button id="smaller" aria-label="Smaller">A−</button><button id="bigger" aria-label="Larger">A+</button></div></div>
 <div class="lab">Page</div>
-<div class="row"><div class="seg" style="flex:1"><button data-theme-btn="auto">Auto</button><button data-theme-btn="paper">Paper</button><button data-theme-btn="light">Light</button><button data-theme-btn="dark">Dark</button></div></div>
+<div class="row"><div class="seg" style="flex:1"><button data-theme-btn="auto">Auto</button><button data-theme-btn="paper">Paper</button><button data-theme-btn="light">Light</button><button data-theme-btn="dark">Dark</button></div></div>{fold}
 </div>
 <div id="veil"></div>
 <main>{body}</main>
 <div id="card" role="dialog" aria-label="Note"></div>
 <button id="top">↑ Top</button>
-<script>const BOOK = {repr(book['title'] + (a.version or ''))};{JS}</script>
+<script>const BOOK = {repr(book['title'] + (a.version or ''))};{JS}{OUTLINE_JS if outline else ''}</script>
 </body></html>
 """
 
