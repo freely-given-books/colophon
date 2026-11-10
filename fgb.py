@@ -25,7 +25,8 @@ works from any folder.
                                   them outside ./fgb
   ./fgb build  [BOOK ...]         PDFs (print editions, then covers) and the
                                   checked EPUB into dist/<author>/<book>/;
-                                  no BOOK = every book on the TEI pipeline.
+                                  no BOOK = every book on the TEI pipeline
+                                  and every print volume.
                                   --pdf / --epub for one kind, --out DIR
   ./fgb outline [BOOK] [--write]  outline levels from the author's numbering
                                   (and a later edition's marks: outline.json);
@@ -61,6 +62,23 @@ has to remember options:
   COVERS = ["cover.typ"]       # covers, compiled after PRINT (default cover*.typ)
   SIDE_BY_SIDE = {"before": [...], "after": [...],
                   "split": ["vol-1/", ...]}        # one page per prefix
+
+A print volume is a paperback made of other books' editions (Owen on Sin: Of
+Temptation and The Mortification of Sin), each still its own book with its own
+TEI, ebook and sign-off. Its folder has no source/, only its print and cover
+files and a volume.toml:
+
+  title = "Owen on Sin"
+  author = "John Owen"
+  books = ["john-owen/of-temptation", "john-owen/the-mortification-of-sin"]
+  print = ["owen-on-sin.typ"]     # optional, as PRINT (default <folder>.typ)
+  covers = ["cover.typ"]          # optional, as COVERS (default cover*.typ)
+
+Its print files #include the books' chapters/typ (../<book>/chapters/typ/...)
+and nothing of any other book. ./fgb build and ./fgb pdf make its PDFs and
+covers with the usual Lulu and page checks; it has no TEI and no EPUB.
+./fgb release gives it a RELEASE.toml naming the signed version of each book
+it is made from, and holds it back when one of them changes (release.py).
 """
 
 import argparse
@@ -89,15 +107,25 @@ def books():
                    for p in REPO.glob(f"books/*/*/source/{pat}")})
 
 
-def find_book(name):
+VOLUME = "volume.toml"
+
+
+def volumes():
+    """Every print volume: a book folder with a volume.toml (no TEI of its own)."""
+    return sorted(p.parent for p in REPO.glob(f"books/*/*/{VOLUME}"))
+
+
+def find_book(name, volumes_too=False):
+    """The book folder `name` names; with volumes_too, a print volume's too."""
+    found = books() + (volumes() if volumes_too else [])
     if name is None:
         cwd = Path.cwd().resolve()
-        for b in books():
+        for b in found:
             if cwd == b or b in cwd.parents:
                 return b
         sys.exit("which book? give part of its name (./fgb list), "
                  "or run this inside the book's folder")
-    hits = [b for b in books() if name.lower() in str(b.relative_to(REPO)).lower()]
+    hits = [b for b in found if name.lower() in str(b.relative_to(REPO)).lower()]
     if len(hits) == 1:
         return hits[0]
     if not hits:
@@ -117,10 +145,29 @@ class Book:
         ed = self.src / "editorial.py"
         sys.path.insert(0, str(HERE))
         self.cfg = runpy.run_path(str(ed)) if ed.exists() else {}
+        # a print volume: its volume.toml gives what editorial.py would
+        self.volume = None
+        if (path / VOLUME).exists():
+            import tomllib
+            self.volume = tomllib.loads((path / VOLUME).read_text(encoding="utf-8"))
+            self.cfg = {k.upper(): self.volume[k] for k in ("print", "covers")
+                        if self.volume.get(k)}
 
     @property
     def name(self):
         return str(self.dir.relative_to(REPO / "books"))
+
+    @property
+    def title(self):
+        return (self.volume or self.cfg.get("EPUB", {})).get("title", self.dir.name)
+
+    @property
+    def author(self):
+        return (self.volume or self.cfg.get("EPUB", {})).get("author", "")
+
+    def parts(self):
+        """A print volume's books, as <author>/<book>, in its order."""
+        return list((self.volume or {}).get("books", []))
 
 
 def run(*args, cwd=None, quiet=False):
@@ -182,6 +229,9 @@ def cmd_list(a):
         bk = Book(b)
         state = "TEI" if bk.tei.exists() else "no TEI yet"
         print(f"  {bk.name:55} {state}")
+    for v in volumes():
+        bk = Book(v)
+        print(f"  {bk.name:55} print volume of {', '.join(bk.parts())}")
 
 
 def cmd_sync(a):
@@ -548,10 +598,10 @@ def build_pdf(bk, outdir, covers=False, problems=None, root=REPO):
             print(f"cover: {geometry[interior_of(f, files)][0]} pages, from "
                   f"{Path(interior_of(f, files)).with_suffix('.pdf').name}")
     for f in cover_files:
-        # a panel_cover.typ cover, or a book's own design that takes
-        # --input front-only=true (the 1689 Confession's)
+        # a panel_cover.typ or plate_cover.typ cover, or a book's own design
+        # that takes --input front-only=true (the 1689 Confession's)
         src = (bk.dir / f).read_text(encoding="utf-8")
-        if "panel-cover(" in src or "front-only" in src:
+        if "panel-cover(" in src or "plate-cover(" in src or "front-only" in src:
             outs.append(render_front(bk, bk.dir / f, outdir,
                                      cover_inputs(geometry.get(interior_of(f, files))), root))
     return outs
@@ -585,7 +635,7 @@ def cmd_epub(a):
 
 
 def cmd_pdf(a):
-    bk = Book(find_book(a.book))
+    bk = Book(find_book(a.book, volumes_too=True))
     build_pdf(bk, dist_dir(bk))
 
 
@@ -655,8 +705,35 @@ def book_dirs():
                   and p.parent.name != "resources" and not p.name.startswith("."))
 
 
+def volume_problems(path):
+    """What is wrong with a print volume's volume.toml and print files ([] if
+    nothing): its books must be books on the TEI pipeline, and its print files
+    include nothing from any other book's folder."""
+    bk = Book(path)
+    why = [f"{VOLUME}: no {k}" for k in ("title", "books") if not bk.volume.get(k)]
+    parts = bk.parts()
+    for p in parts:
+        if REPO / "books" / p not in books():
+            why.append(f"{VOLUME}: {p} is not a book on the TEI pipeline")
+    for f in bk.cfg.get("PRINT") or [bk.dir.name + ".typ"]:
+        if not (bk.dir / f).exists():
+            why.append(f"no print file {f}")
+            continue
+        text = (bk.dir / f).read_text(encoding="utf-8")
+        for inc in re.findall(r'#include\s+"([^"]+)"', text):
+            target = (bk.dir / inc).resolve()
+            if target.is_relative_to(bk.dir):
+                continue
+            owner = next((p for p in parts if target.is_relative_to(REPO / "books" / p)), None)
+            if owner is None:
+                why.append(f"{f} includes {inc}, which is not in one of its books")
+    return why
+
+
 def incompatible(path):
     """Why a book folder cannot be built by the TEI pipeline ([] if it can)."""
+    if (path / VOLUME).exists():
+        return volume_problems(path)
     src = path / "source"
     why = []
     if sources.find(src) is None:
@@ -714,7 +791,10 @@ def cmd_build(a):
             files = []
             if "pdf" in kinds:
                 files += build_pdf(bk, outdir, covers=True)
-            if "epub" in kinds:
+            if bk.volume:
+                # print only: its books' ebooks are their own
+                print(f"a print volume of {', '.join(bk.parts())}: no EPUB")
+            elif "epub" in kinds:
                 epubs = build_epub(bk, outdir)
                 files += epubs + build_web(bk, outdir, files + epubs)
         except SystemExit as e:

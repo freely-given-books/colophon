@@ -61,6 +61,16 @@ corrections made since wait for the next whole version, N+1. Its sign-off says
 whether its print is still revision N's, page for page as rendered (the tag
 message, the catalog).
 
+A print volume (a folder with a volume.toml: a paperback made of other books'
+editions, fgb.py) is released like a book, with its own RELEASE.toml and signed
+tag, but it is print only: its gates are record, clean and print. Its
+RELEASE.toml names, as [[book]] entries, the signed version of each book it is
+made from (`record` writes them, and brings them up to date when run again); it
+can be signed off only when each of those is that book's newest sign-off and the
+book is unchanged since, and it is held back, like a changed book, as soon as
+one of its books changes after the version it names. Its versions are its own
+Lulu revisions (no point versions: it has no ebook).
+
 Signatures are checked against `allowed_signers` at the books repository's
 root (ssh-keygen's format), so anyone can check a tag the same way:
   git -c gpg.ssh.allowedSignersFile=allowed_signers tag -v <tag>
@@ -164,16 +174,36 @@ def uncommitted(d):
     return [l[3:] for l in st.splitlines() if l]
 
 
+def made_from(s):
+    """A print volume's books as its RELEASE.toml names them: per book its
+    sign-off tag there, whether that tag exists, and the book's files changed
+    since it (committed or not)."""
+    out_ = []
+    for x in (s["record"] or {}).get("book", []):
+        b, v = x.get("book", ""), x.get("version", "")
+        tag = f"{b}/{v}"
+        exists = bool(b and v) and git("rev-parse", "-q", "--verify", f"refs/tags/{tag}",
+                                       check=False).returncode == 0
+        d = REPO / "books" / b
+        out_.append({"book": b, "version": v, "tag": tag, "exists": exists,
+                     "changed": changed_since(d, tag) if exists and d.is_dir() else []})
+    return out_
+
+
 def state(d):
     """Where a book stands: its record, its latest sign-off and whether that
-    still holds."""
-    s = {"dir": d, "slug": slug(d), "record": None, "problems": [], "done": False}
+    still holds. A print volume's sign-off also holds only while the books it
+    is made from are as its record names them."""
+    s = {"dir": d, "slug": slug(d), "record": None, "problems": [], "done": False,
+         "volume": (d / fgb.VOLUME).exists()}
     rec = d / RECORD
     if rec.exists():
         try:
             s["record"] = tomllib.loads(rec.read_text(encoding="utf-8"))
         except tomllib.TOMLDecodeError as e:
             s["problems"].append(f"{RECORD}: {e}")
+    if s["volume"]:
+        s["made_from"] = made_from(s)
     tags = book_tags(d)
     s["tags"] = tags
     if not tags:
@@ -185,6 +215,14 @@ def state(d):
     if git("merge-base", "--is-ancestor", t["commit"], "HEAD", check=False).returncode:
         s["problems"].append(f"{tags[0]} is not in this branch's history")
     s["changed"] = changed_since(d, tags[0])
+    if s["volume"]:
+        # a book of the volume changed since the version it was made from: the
+        # volume as signed off is no longer what its books would make now.
+        # (Its record is the one at HEAD; a changed record changes the folder.)
+        for m in s["made_from"]:
+            s["changed"] += m["changed"]
+            if not m["exists"]:
+                s["problems"].append(f"{RECORD}: no sign-off {m['tag']}")
     # done: signed off by an allowed signer and unchanged since; a sign-off
     # that holds but whose signature is not verified is only taken by --trial
     s["holds"] = not s["changed"] and not s["problems"]
@@ -202,10 +240,12 @@ def sha256(path):
     return h.hexdigest()
 
 
-def gate_record(s):
+def gate_record(s, trial=False):
     rec = s["record"]
     if rec is None:
         return [f"no {RECORD} (./fgb release record {s['slug']})"]
+    if s.get("volume"):
+        return gate_volume_record(s, trial)
     bad = []
     srcs = rec.get("source", [])
     if not srcs:
@@ -218,6 +258,37 @@ def gate_record(s):
             bad.append(f"{x['file']}: checksum differs from {RECORD}")
         if not x.get("description"):
             bad.append(f"{x.get('file')}: no description in {RECORD}")
+    return bad
+
+
+def gate_volume_record(s, trial=False):
+    """A print volume's record: the books of its volume.toml, in order, each at
+    a version that is that book's newest sign-off, unchanged since and (but
+    for a trial) signed by an allowed signer; its print files include nothing
+    of any other book."""
+    bk = fgb.Book(s["dir"])
+    bad = list(fgb.volume_problems(s["dir"]))
+    if not s["record"].get("summary"):
+        bad.append(f"no summary in {RECORD}")
+    named = [m["book"] for m in s["made_from"]]
+    if named != bk.parts():
+        bad.append(f"{RECORD} names {', '.join(named) or 'no book'}; {fgb.VOLUME} has "
+                   f"{', '.join(bk.parts())} (./fgb release record {s['slug']})")
+    for m in s["made_from"]:
+        if not m["exists"]:
+            bad.append(f"{m['book']}: no sign-off {m['tag']} (./fgb release record "
+                       f"{s['slug']} names each book's newest)")
+            continue
+        b = state(REPO / "books" / m["book"])
+        if b["tags"][0] != m["tag"]:
+            bad.append(f"{m['book']}: made from {m['version']}, but its newest sign-off "
+                       f"is {b['tag']['version']} (./fgb release record {s['slug']})")
+        elif m["changed"]:
+            bad.append(f"{m['book']}: {len(m['changed'])} file(s) changed since "
+                       f"{m['version']}; sign it off again first")
+        elif not (b["done"] or (trial and b["holds"])):
+            bad.append(f"{m['book']} {m['version']}: " +
+                       ("; ".join(b["problems"]) or b["signature"]))
     return bad
 
 
@@ -252,14 +323,28 @@ def gate_builds(bk, outdir):
     return files, problems
 
 
-def run_gates(s, outdir, log=print):
-    """Every gate on one book; (built files, {gate: [problems]})."""
+def run_gates(s, outdir, log=print, trial=False):
+    """Every gate on one book; (built files, {gate: [problems]}). A print
+    volume's: record, clean and print (it has no TEI or ebook of its own)."""
     d = s["dir"]
-    res = {"record": gate_record(s), "clean": [], "report": gate_report(d)}
+    res = {"record": gate_record(s, trial), "clean": []}
+    if not s.get("volume"):
+        res["report"] = gate_report(d)
     dirty = uncommitted(d)
     if dirty:
         res["clean"] = [f"uncommitted: {', '.join(dirty[:5])}" +
                         (f" and {len(dirty) - 5} more" if len(dirty) > 5 else "")]
+    if s.get("volume"):
+        log("  building ...")
+        problems = []
+        try:
+            files = fgb.build_pdf(fgb.Book(d), outdir, covers=True, problems=problems)
+        except SystemExit as e:
+            files, problems = [], [f"print build failed: {e}"]
+        accepted = set(s["record"].get("accepted_print", []) if s["record"] else [])
+        res["_accepted"] = [p for p in problems if p in accepted and " footnote " in p]
+        res["print"] = [p for p in problems if p not in res["_accepted"]]
+        return files, res
     log("  verify.py ...")
     res["verify"] = gate_verify(d)
     log("  building ...")
@@ -371,6 +456,10 @@ def cmd_status(a):
         if not s["done"]:
             what += ready_note(d)
         print(f"  {s['slug']:58} {what}")
+        for m in s.get("made_from", []):
+            print(f"      made from {m['book']} {m['version'] or '?'}" +
+                  (f": {len(m['changed'])} file(s) changed since" if m["changed"] else
+                   "" if m["exists"] else ": no such sign-off"))
         for f in s.get("changed", [])[:8]:
             print(f"      changed: {f}")
         if gh and t and s.get("changed"):
@@ -387,8 +476,54 @@ def cmd_status(a):
     return 0
 
 
+VOLUME_BOOKS = "# The signed versions of the books this volume is made from"
+
+
+def record_volume(d):
+    """A print volume's RELEASE.toml: written, or its [[book]] entries brought
+    up to date (each book's newest sign-off), the rest kept as edited."""
+    bk = fgb.Book(d)
+    path = d / RECORD
+    q = lambda v: json.dumps(v, ensure_ascii=False)
+    if path.exists():
+        text = path.read_text(encoding="utf-8")
+        if VOLUME_BOOKS not in text:
+            sys.exit(f"{path.relative_to(REPO)}: no \"{VOLUME_BOOKS}\" line to write the "
+                     "books' versions after; edit it by hand")
+        head = text[:text.index(VOLUME_BOOKS)]
+        before = {m["book"]: m["version"] for m in made_from({"record": tomllib.loads(text)})}
+    else:
+        head = "\n".join([
+            f"# Release record of {bk.title}: a print volume made of the editions of",
+            f"# other books ({fgb.VOLUME}). ./fgb release checks it; the editor signs a",
+            f"# version off with a signed tag, {slug(d)}/vN (./fgb release sign).",
+            "",
+            "# One or two sentences for the release catalog: the volume, its books.",
+            'summary = ""',
+            "", ""])
+        before = {}
+    lines = [VOLUME_BOOKS + ", each",
+             f"# one's newest sign-off: ./fgb release record {slug(d)} writes them again",
+             "# after a book is signed off again (then sign the volume off again).", ""]
+    for b in bk.parts():
+        tags = book_tags(REPO / "books" / b)
+        v = tags[0].rsplit("/", 1)[-1] if tags else ""
+        lines += ["[[book]]", f"book = {q(b)}", f"version = {q(v)}", ""]
+        s = state(REPO / "books" / b)
+        was = f" (was {before[b]})" if before.get(b, v) != v else ""
+        print(f"  {b}: {v or 'not signed off'}{was}" +
+              ("" if not tags else
+               f"; but {len(s['changed'])} file(s) changed since: sign it off again, "
+               "then record again" if s["changed"] else ""))
+    path.write_text(head + "\n".join(lines), encoding="utf-8")
+    print(f"wrote {path.relative_to(REPO)}" +
+          ("" if before else ": fill in the summary, then commit it"))
+
+
 def cmd_record(a):
-    d = fgb.find_book(a.book)
+    d = fgb.find_book(a.book, volumes_too=True)
+    if (d / fgb.VOLUME).exists():
+        return record_volume(d)
     path = d / RECORD
     if path.exists():
         sys.exit(f"{path.relative_to(REPO)} exists; edit it by hand (a source's "
@@ -499,7 +634,7 @@ def build_at(tag, outdir, epub=False, then=None):
                 packages.ensure(*m[len("@local/"):].split(":"))
             bk = fgb.Book(wt / book)
             files = fgb.build_pdf(bk, outdir, covers=True, root=wt)
-            if epub:
+            if epub and not bk.volume:
                 files += fgb.build_epub(bk, outdir, root=wt)
             return files, (then(bk, files) if then else None)
         finally:
@@ -541,10 +676,12 @@ def print_differences(old, new, tmp):
 
 
 def cmd_sign(a):
-    d = fgb.find_book(a.book)
+    d = fgb.find_book(a.book, volumes_too=True)
     s = state(d)
     if a.point and a.version:
         sys.exit("give a version or --point, not both")
+    if s["volume"] and (a.point or is_point(a.version or "")):
+        sys.exit(f"{slug(d)} is a print volume: no point versions (it has no ebook)")
     n = next_point(d) if a.point else a.version or str(last_version(d) + 1)
     point = is_point(n)
     if point and n.lstrip("v").split(".")[0] != str(version_key(s["tag"]["tag"])[0]
@@ -575,8 +712,12 @@ def cmd_sign(a):
                     f"Print: changed since {last.rsplit('/', 1)[-1]} "
                     f"({'; '.join(diff)}); not a Lulu revision."]
             print(f"  {lulu[0]}")
-    title = fgb.Book(d).cfg.get("EPUB", {}).get("title", d.name)
-    msg = [f"{title}, v{n.lstrip('v')}"] + lulu + ([a.note] if a.note else [])
+    title = fgb.Book(d).title
+    # a print volume's tag says what it was made from, as its record does
+    parts = ["Made from: " + "; ".join(
+        f"{fgb.Book(REPO / 'books' / m['book']).title} {m['version']} ({m['tag']})"
+        for m in s["made_from"]) + "."] if s["volume"] else []
+    msg = [f"{title}, v{n.lstrip('v')}"] + parts + lulu + ([a.note] if a.note else [])
     args = ["tag", "-s", tag] + [x for m in msg for x in ("-m", m)]
     r = subprocess.run(["git", "-C", str(REPO), *args])   # may ask for the key
     if r.returncode:
@@ -728,6 +869,9 @@ def catalog(rid, entries, colophon, trial=False):
             md.append(f"- a point version: an improved ebook after Lulu revision "
                       f"{print_version(e['version'])[1:]}; the print PDFs are that "
                       f"revision's ({print_version(e['version'])}, built from its tag)")
+        if e.get("made_from"):
+            md.append("- a print volume, made from: " + ", ".join(
+                f"{m['book']} {m['version']} (`{m['tag']}`)" for m in e["made_from"]))
         if e["signed_off"]["note"]:
             md.append(f"- sign-off note: {e['signed_off']['note']}")
         for x in e["sources"]:
@@ -738,6 +882,8 @@ def catalog(rid, entries, colophon, trial=False):
             link = f" <{w['url']}>" if w.get("url") else ""
             md.append(f"- witness: {w.get('description', '')}{link}")
         md.append("- files: " + ", ".join(f"`{f['name']}`" for f in e["files"]))
+        if e["coverage"] is None:
+            continue
         md += ["", "Fidelity to the source (counted from the TEI's record of every "
                "decision; ./fgb coverage):", ""]
         md += [f"- {line}" for line in coverage.summary(e["coverage"])]
@@ -747,16 +893,17 @@ def catalog(rid, entries, colophon, trial=False):
 
 def entry(s, bk, files, carried=False):
     """A book's entry in the catalog."""
-    e = bk.cfg.get("EPUB", {})
     rec = s["record"] or {}
     if carried:
         # its record as signed off
         r = bk.dir / RECORD
         rec = tomllib.loads(r.read_text(encoding="utf-8")) if r.exists() else rec
     t = s["tag"]
+    made = [{"book": x["book"], "version": x["version"],
+             "tag": f"{x['book']}/{x['version']}"} for x in rec.get("book", [])]
     return {
         "book": s["slug"], "folder": s["dir"].name,
-        "title": e.get("title", s["dir"].name), "author": e.get("author", ""),
+        "title": bk.title, "author": bk.author,
         "version": t["version"], "summary": rec.get("summary", ""),
         "signed_off": {"tag": t["tag"], "commit": t["commit"], "date": t["date"],
                        "signer": t["signer"], "note": t["note"],
@@ -764,7 +911,8 @@ def entry(s, bk, files, carried=False):
         "carried": carried,
         "template": template_version(bk),
         "sources": rec.get("source", []), "witnesses": rec.get("witness", []),
-        "coverage": coverage.coverage(bk.tei),
+        **({"made_from": made} if bk.volume else {}),
+        "coverage": None if bk.volume else coverage.coverage(bk.tei),
         "files": files}
 
 
@@ -804,7 +952,7 @@ def cmd_make(a):
         d = s["dir"]
         print(f"\n== {s['slug']} {s['tag']['version']}")
         with tempfile.TemporaryDirectory(prefix="fgb-release-") as tmp:
-            built, res = run_gates(s, Path(tmp))
+            built, res = run_gates(s, Path(tmp), trial=a.trial)
             show_gates(res)
             if any(v for k, v in res.items() if not k.startswith("_")):
                 failed.append(s["slug"])
