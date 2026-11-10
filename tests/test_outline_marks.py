@@ -41,3 +41,14 @@ def test_marks_by_level():
 def test_unnumbered_paragraphs_full_width():
     assert marked([(2, "And this is one way."), (0, "Thus it is.")]) == [
         (None, "And this is one way."), (None, "Thus it is.")]
+
+
+def test_figures():
+    # Watson's plain figures at a set-in level take the level's shape; Goold's marks name
+    # their own level; a top-level figure keeps its form
+    got = marked([(0, "1. The first."), (1, "1. A sub-point."), (2, "<em>2.</em> Deeper."),
+                  (0, "(1.) Goold's second level."), (0, "[2.] His third.")])
+    assert got[0] == ("point point0", "1. The first.")
+    assert got[1] == ("point point1", "(1.) A sub-point.")
+    assert got[3] == ("point point1", "(1.) Goold's second level.")
+    assert got[4] == ("point point2", "[2.] His third.")
