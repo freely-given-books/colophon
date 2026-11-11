@@ -669,7 +669,10 @@ class HtmlR(R):
                     self.add_block(out, c, f'<p class="{c.get("rend")}">{t}</p>')
                 elif t and self.layer == "reg" and self.outline_marks:
                     cls, t = self.mark_point(c, t)
-                    self.add_block(out, c, f'<p class="{cls}">{t}</p>' if cls else f"<p>{t}</p>")
+                    # every paragraph keeps its outline level for the reader's outline
+                    # (the set-in level, which headings start again: not the mark's)
+                    lv = f' data-level="{layout.para_level(c) or 0}"'
+                    self.add_block(out, c, f'<p class="{cls}"{lv}>{t}</p>' if cls else f"<p{lv}>{t}</p>")
                 elif t and self.layer == "reg" and layout.para_level(c):
                     self.add_block(out, c, f'<p class="level{layout.para_level(c)}">{t}</p>')
                 elif t:
