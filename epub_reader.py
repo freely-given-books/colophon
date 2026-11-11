@@ -324,9 +324,9 @@ html { scroll-padding-top:5.5rem; }   /* room for #where, shown or not */
 #outline a .m { font-weight:600; margin-right:.3em; }
 #outline a.up { background:color-mix(in srgb, var(--rule) 15%, transparent); }
 @media screen { .ol-hid { display:none !important; } }
-main p.point .omark.fold { cursor:pointer; border-radius:4px; padding:0 .1em; margin:0 -.1em; }
-main p.point .omark.fold:hover { background:color-mix(in srgb, var(--rule) 35%, transparent); }
-main p.point.folded .omark.fold { color:var(--accent); }
+main p.point .fold { cursor:pointer; border-radius:4px; padding:0 .1em; margin:0 -.1em; }
+main p.point .fold:hover { background:color-mix(in srgb, var(--rule) 35%, transparent); }
+main p.point.folded .fold { color:var(--accent); }
 .ol-chip { display:block; margin:.25rem 0 .9rem; padding:.2rem .75rem; font:13px system-ui,sans-serif;
   color:var(--accent); background:transparent; border:1px dashed var(--rule); border-radius:14px;
   cursor:pointer; }
@@ -350,7 +350,7 @@ OUTLINE_JS = r"""
   const ORD = /^(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|last)(ly)?\b[,.;:]?\s*/i;
   function words(p) {
     const c = p.cloneNode(true);
-    c.querySelectorAll('.omark, a.noteref, sup').forEach(x => x.remove());
+    c.querySelectorAll('.omark, .ol-mark, a.noteref, sup').forEach(x => x.remove());
     return c.textContent.replace(/\s+/g, ' ').trim();
   }
   function label(t) {
@@ -359,6 +359,16 @@ OUTLINE_JS = r"""
     let s = m ? m[1] : t;
     if (s.length > 72) s = s.slice(0, 72).replace(/\s+\S*$/, '') + '…';
     return s.charAt(0).toUpperCase() + s.slice(1);
+  }
+  // a point whose mark is the printed figure itself (Watson's 1. (1.), Goold's as
+  // CCEL keys them): the figure wrapped, unchanged, so it reads and folds as a mark
+  function figure(p) {
+    const tn = p.firstChild, m = tn && tn.nodeType === 3 && /^(\s*)([(\[]?\d+(?:st|nd|rd|th)?\.[)\]]?)(?=\s|$)/.exec(tn.data);
+    if (!m) return null;
+    const f = tn.splitText(m[1].length); f.splitText(m[2].length);
+    const om = document.createElement('span'); om.className = 'ol-mark';
+    f.replaceWith(om); om.append(f);
+    return om;
   }
   const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
   // the tree: each point owns the paragraphs after it up to the next point or heading,
@@ -377,7 +387,7 @@ OUTLINE_JS = r"""
       } else if (el.matches('p.point')) {
         const depth = +((/\bpoint(\d)\b/.exec(el.className) || [0, 0])[1]);
         while (stack.length && stack[stack.length - 1].depth >= depth) stack.pop();
-        const om = el.querySelector('.omark'), t = words(el);
+        const om = el.querySelector('.omark') || figure(el), t = words(el);
         const mark = om ? om.textContent.trim() : ((ORD.exec(t) || [''])[0].replace(/[,.;:\s]+$/, ''));
         const node = { el, depth, lvl: +(el.dataset.level || depth), mark, label: label(t), parent: stack[stack.length - 1] || null,
                        kids: [], body: [], heads, folded: false, chip: null, om };
