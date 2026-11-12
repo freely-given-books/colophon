@@ -54,7 +54,18 @@ def compute_auto(toks):
                     and local(t.el.getparent()) == "div"
                 # a table set as a list: its cells keep the printed capitals
                 plain_cell = n == "cell" and table_mode(t.el) != "inline"
-                walk(t.children, in_note or n == "note", in_head or is_div_head or plain_cell)
+                # MODERNIZE_NOTES = "case": a note is set as body text (sentence case, the
+                # book's LOWERCASE_COMMON_NOUNS), with its own sentences
+                note_body = n == "note" and S.MODERNIZE_NOTES == "case"
+                if note_body:
+                    outer = dict(state)
+                    state.clear()
+                    state.update(start=True, by="block")
+                walk(t.children, (in_note or n == "note") and not note_body,
+                     in_head or is_div_head or plain_cell)
+                if note_body:
+                    state.clear()
+                    state.update(outer)
                 if n == "note":
                     state["start"] = saved
                 if is_emph:
