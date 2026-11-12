@@ -72,13 +72,25 @@ def similar(x, y):
 HEAD = {norm(w) for w in "of chap chapter epistle dedicatorie signature".split()}
 
 
+def typ_files(tei, d):
+    """The extracted chapter files in reading order: the book's layout (files may sit in
+    folders, part-1/...), else the classic dedication first, then by name."""
+    import layout
+    from lxml import etree
+    cfg = layout.settings(tei)
+    files = layout.book_layout(etree.parse(str(tei)).getroot(), cfg) if cfg.get("LAYOUT") else None
+    if files:
+        return [d / f["file"] for f in files if (d / f["file"]).exists()]
+    return sorted(d.rglob("*.typ"), key=lambda p: (p.stem != "dedication", str(p.relative_to(d))))
+
+
 def tcp_words(book):
     """The orig layer's body words (margin notes out: OCR seldom has them)."""
     tei = next((book / "source").glob("*.tei.xml"))
     with tempfile.TemporaryDirectory() as d:
         subprocess.run([sys.executable, str(COLOPHON / "tei_extract.py"), str(tei), d,
                         "--layer", "orig", "--expand"], check=True, capture_output=True)
-        files = sorted(Path(d).glob("*.typ"), key=lambda p: (p.stem != "dedication", p.stem))
+        files = typ_files(tei, Path(d))
         out = []
         for p in files:
             t = re.sub(r"#footnote\[[^\]]*\]", " ", p.read_text())
