@@ -84,8 +84,32 @@ def typ_files(tei, d):
     return sorted(d.rglob("*.typ"), key=lambda p: (p.stem != "dedication", str(p.relative_to(d))))
 
 
-def tcp_words(book):
-    """The orig layer's body words (margin notes out: OCR seldom has them)."""
+def split_notes(t):
+    """(the text without its #footnote[...]s, [each note's text]): the
+    brackets matched, so a note holding #emph[...] is taken whole (a regex
+    up to the first "]" left the rest of such a note in the body)."""
+    body, notes, i = [], [], 0
+    while True:
+        j = t.find("#footnote[", i)
+        if j < 0:
+            body.append(t[i:])
+            return "".join(body), notes
+        body.append(t[i:j] + " ")
+        k, depth = j + len("#footnote["), 1
+        while k < len(t) and depth:
+            if t[k] == "\\":
+                k += 2
+                continue
+            depth += {"[": 1, "]": -1}.get(t[k], 0)
+            k += 1
+        notes.append(t[j + len("#footnote["):k - 1])
+        i = k
+
+
+def tcp_words(book, notes=False):
+    """The orig layer's body words (notes out: OCR of a margin seldom has
+    them), or with notes=True the notes' words alone, in order (footnotes
+    set at the page's foot, which OCR does read: Edwards)."""
     tei = next((book / "source").glob("*.tei.xml"))
     with tempfile.TemporaryDirectory() as d:
         subprocess.run([sys.executable, str(COLOPHON / "tei_extract.py"), str(tei), d,
@@ -93,7 +117,9 @@ def tcp_words(book):
         files = typ_files(tei, Path(d))
         out = []
         for p in files:
-            t = re.sub(r"#footnote\[[^\]]*\]", " ", p.read_text())
+            t, ns = split_notes(p.read_text())
+            if notes:
+                t = "\n".join(ns)
             t = re.sub(r"#\w+(\.\w+)*(\([^)]*\))?", " ", t)
             out.append(re.sub(r"^==+ .*$", " ", t, flags=re.M))
     return modern_words(re.findall(r"[A-Za-zſ]+|&", "\n".join(out)))
@@ -136,7 +162,8 @@ def passes(a, b):
 def main(a_):
     MODERN["on"] = bool(getattr(a_, "modern", False))
     need = a_.agree or len(a_.witness)
-    a = tcp_words(Path(a_.book))
+    notes = bool(getattr(a_, "notes", False))
+    a = tcp_words(Path(a_.book), notes=notes)
     res = [passes(a, witness_words(w)) for w in a_.witness]
     names = [Path(w).name.split(".")[1] if Path(w).name.count(".") > 1 else Path(w).stem for w in a_.witness]
     ctx = lambda i1, i2: f"{' '.join(a[max(0, i1 - 8):i1])} [{' '.join(a[i1:i2])}] {' '.join(a[i2:i2 + 6])}"
@@ -149,6 +176,10 @@ def main(a_):
                         and any(similar(x, y) for x in words for y in v[0])), None)
             if hit:
                 seen.append((n, hit[1]))
+        # --notes: the OCR's body text stands between the notes as long runs
+        # the TCP's notes lack; only a few words inside a note are a candidate
+        if notes and len(words) > 6:
+            continue
         if len(seen) >= need:
             cands.append({"n": len(rows) + 1, "kind": "extra", "page": page, "words": words,
                           "tcp": ctx(i1, i2), "witnesses": dict(seen)})
@@ -175,4 +206,5 @@ if __name__ == "__main__":
     ap.add_argument("book"); ap.add_argument("out"); ap.add_argument("witness", nargs="+")
     ap.add_argument("--agree", type=int)
     ap.add_argument("--modern", action="store_true")
+    ap.add_argument("--notes", action="store_true")
     main(ap.parse_args())
