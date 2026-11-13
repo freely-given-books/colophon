@@ -242,7 +242,8 @@ def build_layout(args, tree, root, text, toks, files, cfg=None):
     rebuild(text, toks)
     if S.OPENING_SMALLCAPS:
         opening_smallcaps([f["parts"] for f in files], root,
-                          (cfg or {}).get("SKIP_DIVISIONS", ()))
+                          (cfg or {}).get("SKIP_DIVISIONS", ()),
+                          numerals=S.OPENING_SMALLCAPS != "words")
     smallcaps_phrases(root, S.SMALLCAPS_PHRASES)
     mark_diagrams(root)
     refstyle.mark_readings(text)
