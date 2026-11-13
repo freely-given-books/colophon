@@ -169,7 +169,11 @@ def opening_smallcaps(blocks, root, skip=()):
         return None
 
     def caps(word):
-        w = word.replace("ſ", "s")
+        w = re.sub(r"[^A-Za-z'’-]", "", word.replace("ſ", "s"))    # a gap's placeholder out
+        # not a roman numeral ("II. 'Tis no Sign", a layout file opening a point)
+        # nor an ordinal in roman figures ("IId. Thing proposed", Edwards's 2d)
+        if re.fullmatch(r"[IVXLC]+(?:[dhst]{1,2})?", w):
+            return False
         return len(w) > 1 and w[0].isupper() and w[1].isupper()
 
     def wrap_text(parent, attr, owner, index):
@@ -208,6 +212,20 @@ def opening_smallcaps(blocks, root, skip=()):
                 seg.append(c)
                 return True
             if n == "seg" and c.get("type") == "opening":
+                return True
+            if n == "seg" and c.get("rend") == "decorInit":
+                # a decorated initial and the rest of its word ("T" + "HERE is"): both
+                m = re.match(r"[A-Za-zſ'’-]*", c.tail or "")
+                if not caps((c.text or "") + m.group()):
+                    return False
+                seg = etree.Element(T + "seg")
+                seg.set("rend", "smallcaps")
+                seg.set("type", "opening")
+                rest = (c.tail or "")[m.end():]
+                c.tail = m.group()
+                el.replace(c, seg)
+                seg.append(c)
+                seg.tail = rest
                 return True
             if n in ("hi", "seg", "table", "row", "cell"):
                 r = walk(c)
