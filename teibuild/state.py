@@ -21,6 +21,7 @@ HEAD_MODE = {"on": False, "run_in": set()}
 
 
 SUBTITLES = set()       # layout subtitles: printed heads set as a centred line
+EPIGRAPHS = set()       # layout epigraphs' printed elements (heads): cased as text, not heads
 
 
 # CLOSER_PLAIN: openers and closers are set as plain paragraphs (a salute,

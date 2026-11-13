@@ -1096,6 +1096,13 @@ def layout_file_lines(r, f, cfg, pre):
                       f"  #strong[{t}]", "]]", "", "#v(0.9em)", ""]
         elif t:
             lines += [f"#align(center)[{t}]" if r.layer == "reg" else t, ""]
+    if f.get("epigraph"):
+        ref, verse = f["epigraph"]
+        ref_t, verse_t = (collapse(r.inline(e)).strip() for e in (ref, verse))
+        if r.layer == "reg":
+            lines += epigraph_block(ref_t, verse_t)
+        else:
+            lines += [ref_t, "", verse_t, ""]
     for el in f["parts"]:
         part_lines(r, el, 3, lines)
     lines = join_run_on(lines)

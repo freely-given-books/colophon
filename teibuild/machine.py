@@ -14,7 +14,7 @@ import layout  # noqa: E402
 from teibuild import settings as S  # noqa: E402
 from teibuild.settings import INTERJECTIONS, LATIN_MIN_WORDS, QUOTE_MIN_WORDS  # noqa: E402
 from teibuild.words import auto_reg, word_strings  # noqa: E402
-from teibuild.state import BLOCK_MARK, HEAD_MODE, SPLIT_RE, SUBTITLES  # noqa: E402
+from teibuild.state import BLOCK_MARK, EPIGRAPHS, HEAD_MODE, SPLIT_RE, SUBTITLES  # noqa: E402
 
 
 def compute_auto(toks):
@@ -51,7 +51,7 @@ def compute_auto(toks):
                     state["quote_first"] = len(words) >= QUOTE_MIN_WORDS
                 saved = state["start"]
                 is_div_head = n == "head" and t.el.getparent() is not None \
-                    and local(t.el.getparent()) == "div"
+                    and local(t.el.getparent()) == "div" and t.el not in EPIGRAPHS
                 # a table set as a list: its cells keep the printed capitals
                 plain_cell = n == "cell" and table_mode(t.el) != "inline"
                 # MODERNIZE_NOTES = "case": a note is set as body text (sentence case, the

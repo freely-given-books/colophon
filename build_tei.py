@@ -42,7 +42,7 @@ import sources  # noqa: E402
 from teibuild import settings as S  # noqa: E402
 from teibuild.settings import load_tables  # noqa: E402
 from teibuild.tokens import View  # noqa: E402
-from teibuild.state import BLOCK_MARK, HEAD_MODE, ROOT, SETTINGS, SPLIT_RE, SUBTITLES  # noqa: E402
+from teibuild.state import BLOCK_MARK, EPIGRAPHS, HEAD_MODE, ROOT, SETTINGS, SPLIT_RE, SUBTITLES  # noqa: E402
 from teibuild.emit import rebuild  # noqa: E402
 from teibuild.machine import compute_auto, stream  # noqa: E402
 from teibuild.align import align  # noqa: E402
@@ -94,6 +94,9 @@ def main():
     root = tree.getroot()
     text = root.find(".//" + T + "text")
     toks = tokenize(text, {"macron": 0, "gap": 0})
+    # a layout's epigraph heads are cased as text by the machine pass
+    for f in (layout.book_layout(root, cfg) or []):
+        EPIGRAPHS.update(f.get("epigraph") or ())
     compute_auto(toks)
     if args.list:
         list_editorial(toks)
@@ -222,6 +225,7 @@ def build_layout(args, tree, root, text, toks, files, cfg=None):
             if f["title"] and title and " ".join(title.split()) != " ".join(f["title"].split()):
                 unresolved.append((fname, "file title (change it in the LAYOUT)", title))
             sub = [f["subtitle"]] if f.get("subtitle") is not None else []
+            sub += list(f.get("epigraph") or [])
             SUBTITLES.update(sub)
             view = View([by_el[p] for p in sub + f["parts"]], None)
             st, s = review_division(view, review, fname, log, unresolved)
