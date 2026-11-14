@@ -973,7 +973,8 @@ def signature_block(r, lines, c, t, first):
     if first[0]:
         lines += ["#v(1em)", ""]
         first[0] = False
-    lines += [f"#align(right)[{t}]", ""]
+    for line in layout.signature_lines(t, getattr(r, "settings", {})):
+        lines += [f"#align(right)[{line}]", ""]
 
 
 def quote_lines(r, q):

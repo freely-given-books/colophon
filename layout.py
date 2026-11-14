@@ -144,6 +144,21 @@ def verse_division(el):
 
 # a valediction that ends in the signer's name in capitals: "... Devotion. THOMAS WATSON."
 SIGNATURE_NAME = re.compile(r"^(.*?[.,;:])\s+([A-Z][A-Z.'’]+(?:\s+[A-Z][A-Z.'’]+)*\.?)$", re.S)
+# a valediction signed by several, their names in initials ("Your Servants in the Gospel,
+# T. Prince, W. Cooper."): with SIGNATURE_NAME_LINE the valediction and each name a line
+SIGNATORIES = re.compile(r"^(.*?,)\s+((?:[A-Z]\.\s*)+[A-Z][a-z]+(?:,\s+(?:[A-Z]\.\s*)+[A-Z][a-z]+)+\.?)$", re.S)
+
+
+def signature_lines(t, settings):
+    """A signature's lines in the edition: one, or with SIGNATURE_NAME_LINE several signatories
+    in one signed line set a line each (the names keep their commas)."""
+    if not (settings or {}).get("SIGNATURE_NAME_LINE"):
+        return [t]
+    m = SIGNATORIES.match(t)
+    if not m:
+        return [t]
+    names = re.split(r"(?<=,)\s+", m.group(2))
+    return [m.group(1)] + names
 
 
 def closer_lines(closer, layer="reg"):

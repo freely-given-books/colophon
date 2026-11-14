@@ -214,9 +214,10 @@ class HtmlR(R):
         if self.layer != "reg" or (c is not None and c.get("prev")):
             self.add_block(out, c if c is not None else etree.Element("x"), f"<p>{t}</p>")
             return
-        cls = "signature signature-first" if first[0] else "signature"
-        first[0] = False
-        out.append(f'<p class="{cls}">{t}</p>')
+        for line in layout.signature_lines(t, getattr(self, "settings", {})):
+            cls = "signature signature-first" if first[0] else "signature"
+            first[0] = False
+            out.append(f'<p class="{cls}">{line}</p>')
 
     def para(self, el, cls=None):
         t = self.text(el)
