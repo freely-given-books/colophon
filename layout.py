@@ -116,7 +116,7 @@ def check(root, files, cfg):
                 walk(c)
             elif n in ("head", "pb", "milestone", "fw", "lb"):
                 continue
-            elif n in ("front", "body", "back", "group", "text"):
+            elif n in ("front", "body", "back", "group", "text", "floatingText"):
                 walk(c)
             elif words(c):
                 missing.append((c, words(c)))
