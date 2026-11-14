@@ -90,8 +90,11 @@ def compute_auto(toks):
                                      quote_start=state.pop("quote_first", False))
                     if re.search(r"[A-Za-z]", t.expanded):
                         state["start"], state["by"] = False, None
+                        if S.MODERNIZE_FILLS and t.gaps and re.search(r"[.!?]\W*$", t.expanded):
+                            state["start"], state["by"] = True, "punct"   # a fill's own stop: "How so?"
                     state["num"] = bool(re.fullmatch(r"\d+", t.expanded))
                     state["word"] = t.expanded.lower()
+                    state["raw"] = t.expanded
             elif t.kind == "punct":
                 p = t.pieces[0]
                 t.orig = p if isinstance(p, str) else (p.text or "")
@@ -100,7 +103,12 @@ def compute_auto(toks):
                     # "1." opening a paragraph is its numeral, not a sentence
                     numeral = state.get("num") and state["start"] and \
                         state.get("by") == "block" and t.orig == "."
+                    if t.orig in ("—", "–") and state["start"]:
+                        continue             # "Meats.—By this": the dash after a stop opens nothing
                     state["start"] = t.orig in ".!?"
+                    if t.orig == "." and state.get("raw") in ("i", "e"):
+                        state["start"] = False      # "i. e. yield": an abbreviation's stop
+                    state["raw"] = None
                     if t.orig == "!" and state.get("word") in INTERJECTIONS:
                         state["start"] = False      # "oh! how", "Ah! you": the sentence goes on
                     state["word"] = None
