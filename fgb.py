@@ -572,13 +572,33 @@ def cover_inputs(geometry):
             "--input", f"trim-height={h}"]
 
 
+def cover_ground(bk, cover, extra, root=REPO):
+    """A plate cover's grounds and plate as one opaque picture, for the cover
+    to lay under its type (scripts/plate_cover.typ: Lulu's prepress flattens
+    any transparency into tiles that leave a box round the plate). Rendered at
+    300 ppi with --input layer=ground, its alpha dropped, into a git-ignored
+    file beside the cover; returns the --input that lays it, or [] for any
+    other cover."""
+    src = cover.read_text(encoding="utf-8")
+    if "plate-cover(" not in src or not re.search(r"^\s*plate:", src, re.M):
+        return []
+    img = cover.with_name(f".{cover.stem}-ground.png")
+    raw = img.with_suffix(".raw.png")
+    print(f"typst: {cover.relative_to(root)} (ground, 300 ppi)")
+    run("typst", "compile", "--root", root, *extra, "--input", "layer=ground",
+        "--format", "png", "--ppi", "300", cover, raw, cwd=bk.dir)
+    run("magick", raw, "-alpha", "remove", "-alpha", "off", "-type", "TrueColor", img)
+    raw.unlink()
+    return ["--input", "background=/" + img.resolve().relative_to(Path(root).resolve()).as_posix()]
+
+
 def build_pdf(bk, outdir, covers=False, problems=None, root=REPO):
     """The print PDFs (and covers) into outdir. root: the repository the book
     is in (another checkout of it, for a book as it was at a sign-off)."""
     files = bk.cfg.get("PRINT") or [bk.dir.name + ".typ"]
     cover_files = (bk.cfg.get("COVERS") or
                    sorted(p.name for p in bk.dir.glob("cover*.typ"))) if covers else []
-    outs, geometry = [], {}
+    outs, geometry, grounds = [], {}, {}
     for f in files + cover_files:
         src = bk.dir / f
         out = outdir / Path(f).with_suffix(".pdf").name
@@ -586,6 +606,9 @@ def build_pdf(bk, outdir, covers=False, problems=None, root=REPO):
         # a cover is given its interior's page count and trim (panel_cover.typ
         # takes them from --input), so its spine cannot fall out of step
         extra = cover_inputs(geometry.get(interior_of(f, files))) if f in cover_files else []
+        if f in cover_files:
+            grounds[f] = cover_ground(bk, src, extra, root)
+            extra += grounds[f]
         # --root: covers import the shared design from scripts/
         run("typst", "compile", "--root", root, *extra, src, out, cwd=bk.dir)
         outs.append(out)
@@ -602,8 +625,8 @@ def build_pdf(bk, outdir, covers=False, problems=None, root=REPO):
         # that takes --input front-only=true (the 1689 Confession's)
         src = (bk.dir / f).read_text(encoding="utf-8")
         if "panel-cover(" in src or "plate-cover(" in src or "front-only" in src:
-            outs.append(render_front(bk, bk.dir / f, outdir,
-                                     cover_inputs(geometry.get(interior_of(f, files))), root))
+            extra = cover_inputs(geometry.get(interior_of(f, files)))
+            outs.append(render_front(bk, bk.dir / f, outdir, extra + grounds.get(f, []), root))
     return outs
 
 
