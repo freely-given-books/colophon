@@ -174,7 +174,8 @@ def correct(tree, sup):
     """Apply the supplement's <corrections>: each <fix pb before tcp print
     after/> finds before+tcp+after in one text node of printed page pb (white
     space matching any white space; exactly once, or once as the whole of
-    its text node) and sets the printed text
+    its text node, or with n="K" the Kth place on the page that is a whole text node)
+    and sets the printed text
     there as <seg type="transcription" change="#id">, the transcription's
     reading kept in a comment inside it.  White space at either end of
     print stays outside the seg."""
@@ -190,13 +191,17 @@ def correct(tree, sup):
                           for i, x in enumerate((before, tcp, after)))
             hits = [(el, attr, m) for el, attr in _page_texts(root, page)
                     for m in re.finditer(pat, getattr(el, attr) or "")]
-            if len(hits) > 1:
-                # a letter or two can stand alone in its text node (a note's
-                # stray "M" before a gap): the hit that is the whole node wins
-                whole = [h for h in hits
-                         if not (getattr(h[0], h[1]) or "").replace(h[2].group(0), "", 1).strip()]
-                if len(whole) == 1:
-                    hits = whole
+            # a letter or two can stand alone in its text node (a note's stray
+            # "M" before a gap): the hit that is the whole node wins
+            whole = [h for h in hits
+                     if not (getattr(h[0], h[1]) or "").replace(h[2].group(0), "", 1).strip()]
+            if fix.get("n"):
+                # several such whole nodes on the page (" and " between two
+                # gaps): the nth of them, in page order
+                k = int(fix.get("n"))
+                hits = whole[k - 1:k] if len(whole) >= k else []
+            elif len(hits) > 1 and len(whole) == 1:
+                hits = whole
             if len(hits) != 1:
                 raise SystemExit(f"correction on p. {page}: {before!r} {tcp!r} {after!r} "
                                  f"found {len(hits)} times (needs exactly one)")

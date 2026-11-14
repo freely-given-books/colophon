@@ -559,6 +559,10 @@ class HtmlR(R):
                 out.append(f'<p class="subtitle strong">{t}</p>')    # bold, set off
             elif t:
                 out.append(f'<p class="subtitle">{t}</p>')
+        if f.get("epigraph"):
+            ref, verse = (self.text(e) for e in f["epigraph"])
+            out.append(self.epigraph_div(ref, verse) if self.layer == "reg"
+                       else f"<p>{ref}</p><p>{verse}</p>")
         for el in f["parts"]:
             if local(el) == "div":
                 out += self.div_html(el, self.levels.get(el.get("type"), 2))

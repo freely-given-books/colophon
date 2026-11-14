@@ -14,7 +14,7 @@ import layout  # noqa: E402
 from teibuild import settings as S  # noqa: E402
 from teibuild.settings import INTERJECTIONS, LATIN_MIN_WORDS, QUOTE_MIN_WORDS  # noqa: E402
 from teibuild.words import auto_reg, word_strings  # noqa: E402
-from teibuild.state import BLOCK_MARK, HEAD_MODE, SPLIT_RE, SUBTITLES  # noqa: E402
+from teibuild.state import BLOCK_MARK, EPIGRAPHS, HEAD_MODE, SPLIT_RE, SUBTITLES  # noqa: E402
 
 
 def compute_auto(toks):
@@ -51,10 +51,21 @@ def compute_auto(toks):
                     state["quote_first"] = len(words) >= QUOTE_MIN_WORDS
                 saved = state["start"]
                 is_div_head = n == "head" and t.el.getparent() is not None \
-                    and local(t.el.getparent()) == "div"
+                    and local(t.el.getparent()) == "div" and t.el not in EPIGRAPHS
                 # a table set as a list: its cells keep the printed capitals
                 plain_cell = n == "cell" and table_mode(t.el) != "inline"
-                walk(t.children, in_note or n == "note", in_head or is_div_head or plain_cell)
+                # MODERNIZE_NOTES = "case": a note is set as body text (sentence case, the
+                # book's LOWERCASE_COMMON_NOUNS), with its own sentences
+                note_body = n == "note" and S.MODERNIZE_NOTES == "case"
+                if note_body:
+                    outer = dict(state)
+                    state.clear()
+                    state.update(start=True, by="block")
+                walk(t.children, (in_note or n == "note") and not note_body,
+                     in_head or is_div_head or plain_cell)
+                if note_body:
+                    state.clear()
+                    state.update(outer)
                 if n == "note":
                     state["start"] = saved
                 if is_emph:

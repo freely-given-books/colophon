@@ -929,6 +929,8 @@ def main():
     p.add_argument("--agree", type=int, help="witnesses that must agree (default: all)")
     p.add_argument("--modern", action="store_true", help="compare in modern spelling (witnesses "
                    "of a later printing, or a modern text)")
+    p.add_argument("--notes", action="store_true", help="the TCP's footnotes alone against the "
+                   "witnesses (notes printed at the page's foot)")
     p.set_defaults(fn=cmd_collate)
     p = sub.add_parser("crops", help="each collation candidate's printed lines, cut from "
                        "the page, and contact sheets (ocr/crops.py)")

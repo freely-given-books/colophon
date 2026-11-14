@@ -38,7 +38,9 @@ REPORT_NOTES = []
 
 
 # Margin notes modernized as well, keeping their capitals as printed (the
-# default keeps notes in original spelling, abbreviations expanded).
+# default keeps notes in original spelling, abbreviations expanded); "case":
+# modernized and cased as body text (sentence case, LOWERCASE_COMMON_NOUNS),
+# for notes that are prose in a book that capitalizes its nouns (Edwards).
 MODERNIZE_NOTES = False
 
 

@@ -140,7 +140,7 @@ def smallcaps_phrases(root, phrases):
 OPENING_SKIP = {"pb", "lb", "milestone", "fw", "note", "anchor", "label", "gap"}
 
 
-def opening_smallcaps(blocks, root, skip=()):
+def opening_smallcaps(blocks, root, skip=(), numerals=True):
     """OPENING_SMALLCAPS: the first word of each division, printed in capitals
     after a drop cap (GOD, AND, COnsider), set in small capitals:
     seg[@rend="smallcaps"][@type="opening"] around it. `blocks` are the first
@@ -170,6 +170,13 @@ def opening_smallcaps(blocks, root, skip=()):
 
     def caps(word):
         w = word.replace("ſ", "s")
+        if not numerals:
+            w = re.sub(r"[^A-Za-z'’-]", "", w)     # a gap's placeholder out
+        # OPENING_SMALLCAPS = "words" (numerals=False): not a roman numeral ("II. 'Tis no
+        # Sign", a layout file opening a point) nor an ordinal in roman figures ("IId. Thing
+        # proposed", Edwards's 2d); True keeps them, as the books made before it
+        if not numerals and re.fullmatch(r"[IVXLC]+(?:[dhst]{1,2})?", w):
+            return False
         return len(w) > 1 and w[0].isupper() and w[1].isupper()
 
     def wrap_text(parent, attr, owner, index):

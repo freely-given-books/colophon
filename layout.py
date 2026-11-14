@@ -22,6 +22,10 @@ the TEI root element and returning a list of files, in reading order:
                                            # space after (Watson)
      "part": None,                         # optional: a part heading before this
                                            # file (ebook only; print sets its own)
+     "epigraph": None,                     # optional: (reference, verse) printed
+                                           # elements (heads: Edwards's 1 Pet 1:8 over
+                                           # Part I) set as the file's scripture
+                                           # epigraph, as an <epigraph> is
      "kicker": None,                       # optional: the file's place in the
                                            # work's own divisions ("The Fourth
                                            # Treatise · §§. 1–12"), a line under
@@ -70,6 +74,7 @@ def book_layout(root, cfg):
         f.setdefault("title", None)
         f.setdefault("subtitle", None)
         f.setdefault("subtitle_rend", None)
+        f.setdefault("epigraph", None)
     return files
 
 
@@ -91,7 +96,8 @@ def check(root, files, cfg):
     skip_blocks = set(cfg["SKIP_BLOCKS"](root)) if cfg.get("SKIP_BLOCKS") else set()
     covered = set()
     for f in files:
-        for p in f["parts"] + ([f["subtitle"]] if f.get("subtitle") is not None else []):
+        for p in f["parts"] + ([f["subtitle"]] if f.get("subtitle") is not None else []) \
+                + list(f.get("epigraph") or []):
             covered.add(p)
     missing = []
 
