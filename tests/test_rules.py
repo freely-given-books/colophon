@@ -34,6 +34,17 @@ def test_god_capitalized(tmp_path):
     assert len(rules.god_capitalized(bad)) == 1
 
 
+def test_holy_name_capitalized(tmp_path):
+    typ = tmp_path / "chapters" / "typ"
+    typ.mkdir(parents=True)
+    (typ / "a.typ").write_text("the Holy Ghost; sealed with that holy Spirit of promise; "
+                               "his holy Ghost? no: the good and holy Spirit.\n")
+    found = rules.holy_name_capitalized(tmp_path)
+    assert len(found) == 1 and "his holy Ghost" in found[0]
+    (typ / "b.typ").write_text("grieve not the holy Spirit of God\n")
+    assert len(rules.holy_name_capitalized(tmp_path)) == 2
+
+
 def test_sweep_clean(tmp_path):
     typ = tmp_path / "chapters" / "typ"
     typ.mkdir(parents=True)

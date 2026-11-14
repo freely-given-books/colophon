@@ -10,6 +10,11 @@ places that break it (empty: kept).
   god_capitalized     the editor's rule (2026-11-01): God is always
                       capitalized; the machine never lowercases a printed
                       "God" (the editor may, for a false god)
+  holy_name_capitalized  the editor's rule (2026-11-13): the divine name
+                      "Holy Ghost" / "Holy Spirit" keeps its capital in the
+                      reading text (a book's noun list lowercases "holy");
+                      "holy" after his/thy/that/my/our/your/her/and is the
+                      KJV's adjective (his holy Spirit) and stays as printed
   sweep_clean         books lesson 3 (thin spaces keyed as full ones) and
                       colophon lesson 12 (#emph[..]; swallows the ";"):
                       sweep.py's spacing and semicolon hits in chapters/typ
@@ -79,6 +84,20 @@ def god_capitalized(tei):
     return out
 
 
+# "holy" lowercased in the divine name, not as the adjective after a possessive, "that" or "and"
+HOLY_NAME = re.compile(r"(?<!\bhis )(?<!\bthy )(?<!\bthat )(?<!\bmy )(?<!\bour )(?<!\byour )"
+                       r"(?<!\bher )(?<!\band )\bholy (?:Ghost\b|Spirit\b)|\bholy Ghost\b")
+
+
+def holy_name_capitalized(book):
+    out = []
+    for f in sorted((book / "chapters" / "typ").rglob("*.typ")):
+        flat = sweep.prose(f.read_text(encoding="utf-8"))
+        for m in HOLY_NAME.finditer(flat):
+            out.append(f"{f.relative_to(book)}: {context(flat, m)}")
+    return out
+
+
 def sweep_clean(book):
     kinds = {k: re.compile(p) for k, p in sweep.CHECKS if k in ("spacing", "semicolon")}
     out = []
@@ -113,6 +132,7 @@ def book_rules(book, tei, pdf=None):
     """[(rule, problems)] for one book."""
     return [("spelling_archaisms", spelling_archaisms()),
             ("god_capitalized", god_capitalized(tei)),
+            ("holy_name_capitalized", holy_name_capitalized(book)),
             ("sweep_clean", sweep_clean(book)),
             ("quotes_curled", quotes_curled(tei, pdf))]
 
