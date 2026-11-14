@@ -930,6 +930,18 @@ class _Loose:
         return iter([self.el])
 
 
+LEVEL_WRAP = re.compile(r"(#pad\(left: [\d.]+em\)\[)?#par\(first-line-indent: [^\[\]]*\)\[")
+
+
+def level_wrap(line):
+    """An outline level's wrapper opening `line` (`#pad(left: ..)[#par(..)[`
+    or `#par(..)[`) and closing it: (length of the opening, the closing
+    brackets), or None."""
+    m = LEVEL_WRAP.match(line)
+    close = "]]" if m and m.group(1) else "]"
+    return (m.end(), close) if m and line.endswith(close) else None
+
+
 def add_block(r, lines, c, t):
     """A paragraph-like block; in the reg layer one with @prev (the review
     ran it on from the block before) joins that block's paragraph."""
@@ -953,6 +965,13 @@ def add_block(r, lines, c, t):
             if t.startswith(wrap) and t.endswith("]"):
                 t = t[len(wrap):-1]
             lines[-2] = lines[-2][:-1] + sp + t + "]"
+        elif (w := level_wrap(lines[-2])):
+            # runs on inside an outline level's #pad/#par wrapper (Owen's
+            # "viz. 1. To endear, 2. cleanse," with "3. To Melt" keyed as the
+            # next paragraph at a page turn): its own wrapper dropped
+            if (v := level_wrap(t)):
+                t = t[v[0]:-len(v[1])]
+            lines[-2] = lines[-2][:-len(w[1])] + sp + t + w[1]
         else:
             lines[-2] += sp + t
     else:
