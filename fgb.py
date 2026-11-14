@@ -57,7 +57,13 @@ has to remember options:
           "css": [...], "before": [...],  # front panel is rendered
           "after": [...], "toc_depth": 4, # paths from the book folder
           "volumes": [{"files": ["vol-1/"], "title": ..., "file": ...,
-                       "cover": ..., "front": ...}, ...]}  # one EPUB each
+                       "cover": ..., "front": ...}, ...],  # one EPUB each
+          "modern": {"chapters": "chapters/modern", "file": ...,
+                     "cover": "cover-modern.typ", ...}}  # the Modern English
+                                  # edition: its text from chapters/modern, the
+                                  # rest as the edition's (MODERN-ENGLISH-RULES.md);
+                                  # its print file and cover-modern.typ go in
+                                  # PRINT / beside cover.typ
   PRINT = ["book.typ"]                             # Typst files to compile
   COVERS = ["cover.typ"]       # covers, compiled after PRINT (default cover*.typ)
   SIDE_BY_SIDE = {"before": [...], "after": [...],
@@ -472,7 +478,11 @@ def build_epub(bk, outdir, root=REPO):
             outs += build_one_epub(bk, outdir, {**{k: x for k, x in e.items()
                                                     if k != "volumes"}, **v}, root)
         return outs
-    return build_one_epub(bk, outdir, e, root)
+    outs = build_one_epub(bk, outdir, e, root)
+    if e.get("modern"):
+        outs += build_one_epub(bk, outdir, {**{k: x for k, x in e.items() if k != "modern"},
+                                            **e["modern"]}, root)
+    return outs
 
 
 def build_web(bk, outdir, built, link=lambda name: name):
@@ -487,6 +497,16 @@ def build_web(bk, outdir, built, link=lambda name: name):
     vols = e.get("volumes") or [None]
     names = {f.name: f for f in built}
     outs = []
+    m = e.get("modern")
+    if m and m.get("file") in names:
+        epub = names[m["file"]]
+        pdf = names.get(epub.stem + ".pdf")
+        reader = outdir / f"{epub.stem}-reader.html"
+        args = [PY, HERE / "epub_reader.py", epub, reader, "--epub-link", link(epub.name)]
+        if pdf is not None:
+            args += ["--pdf", link(pdf.name)]
+        run(*args, quiet=True)
+        outs.append(reader)
     for v in vols:
         epub = names.get((v or e).get("file", bk.dir.name + ".epub"))
         if epub is None:
@@ -532,6 +552,8 @@ def build_one_epub(bk, outdir, e, root=REPO):
         args += ["--toc-depth", e["toc_depth"]]
     for f in e.get("files", []):
         args += ["--files", f]
+    if e.get("chapters"):
+        args += ["--chapters", bk.dir / e["chapters"]]
     run(*args, cwd=bk.dir)
     if shutil.which("epubcheck"):
         r = subprocess.run(["epubcheck", str(out)], capture_output=True, text=True)
