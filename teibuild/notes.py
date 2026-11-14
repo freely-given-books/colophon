@@ -261,10 +261,11 @@ def review_division(d, review, f, log, unresolved):
             el.set("change", "#review")
             words = [t for t, _ in nt["toks"]]
             sps = nt.get("sp")
-            el.text = join_sp(words, sps if sps and len(sps) == len(words) else None)
+            text = join_sp(words, sps if sps and len(sps) == len(words) else None)
+            italic_runs(el, text, words, [bool(fl) for _, fl in nt["toks"]])
             k = prev_word(nt["anchor"])
             (placed.setdefault(k, []) if k >= 0 else before_first).append(el)
-            log.append((f, "note", "(none)", el.text))
+            log.append((f, "note", "(none)", text))
             continue
         note_tok, es, a = notes[i]
         if j is None:                      # a printed note the editor dropped
@@ -383,3 +384,35 @@ def review_division(d, review, f, log, unresolved):
             if j is not None and not review.body_sp[j]:
                 NO_SPACE_RUN_ON.add(id(x["at"][2]))
     return st, body
+
+
+def italic_runs(el, text, words, italic):
+    """Set an added note's text in el, its italic words (the review's #emph) as <hi>: each run
+    of italic words, with the spaces between them, one <hi>."""
+    spans, at = [], 0
+    for w in words:
+        i = text.find(w, at)
+        if i < 0:                          # spacing the words do not show: plain text
+            el.text = text
+            return
+        spans.append((i, i + len(w)))
+        at = i + len(w)
+    el.text, last, k = "", None, 0
+    while k < len(words):
+        if not italic[k]:
+            k += 1
+            continue
+        m = k
+        while m + 1 < len(words) and italic[m + 1]:
+            m += 1
+        if last is None:
+            el.text += text[:spans[k][0]]
+        else:
+            prev.tail = text[spans[last][1]:spans[k][0]]
+        hi = etree.SubElement(el, T + "hi")
+        hi.text = text[spans[k][0]:spans[m][1]]
+        prev, last, k = hi, m, m + 1
+    if last is None:
+        el.text = text
+    else:
+        prev.tail = text[spans[last][1]:]
