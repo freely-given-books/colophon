@@ -76,6 +76,12 @@ EXPAND_ETC = False
 ITALIC_SENTENCE_QUIRK = True
 
 
+# Words read into a gap ("dead Frames;", "Unworthiness,") modernized word by word like the
+# words around them (case, spelling); off, a fill of more than one word, or with its stop,
+# stays as the print spells it.
+MODERNIZE_FILLS = False
+
+
 # A decorated initial printed with its word in capitals ("AS there are"):
 # set the word in ordinary case at the start of the paragraph.
 DROP_CAP_CASE = False
@@ -141,7 +147,7 @@ def load_tables(path):
                  "EXPAND_ETC", "ITALIC_SENTENCE_QUIRK", "DROP_CAP_CASE",
                  "MODERNIZE", "TYPOGRAPHY", "DASH", "AUTHOR", "QUOTE_START_CASE",
                  "OPENING_SMALLCAPS", "SMALLCAPS_PHRASES", "DIAGRAM_LISTS",
-                 "PARALLEL_TABLES"):
+                 "PARALLEL_TABLES", "MODERNIZE_FILLS"):
         if name in ns:
             g[name] = ns[name]
     # the book's own spellings, over the shared table (e.g. Gouge keeps

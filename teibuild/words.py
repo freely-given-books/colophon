@@ -72,6 +72,8 @@ def auto_reg(tok, sentence_start, heading=False, quote_start=False):
     if any(not isinstance(p, (str, tuple)) and local(p) == "hi" for p in tok.pieces):
         return w                     # y^e -> the (already expanded)
     if not re.fullmatch(r"[A-Za-z']+", w):
+        if S.MODERNIZE and S.MODERNIZE_FILLS and tok.gaps and re.search(r"[A-Za-z]", w):
+            return fill_reg_words(w, sentence_start, heading, quote_start)
         return w
     if not S.MODERNIZE:
         return w
@@ -102,6 +104,30 @@ def auto_reg(tok, sentence_start, heading=False, quote_start=False):
     if w[:1].isupper() and low in AMBIGUOUS_NAMES:
         return AMBIGUOUS_NAMES[low]  # "Mary" mid-sentence is the name, not "marry"
     return apply_case_pattern(w, mod)
+
+
+class _Word:
+    """One word of a gap's fill, as auto_reg takes a token."""
+    def __init__(self, w):
+        self.expanded, self.pieces, self.gaps = w, [], []
+
+
+def fill_reg_words(text, sentence_start, heading=False, quote_start=False):
+    """A gap's fill of words and stops ("dead Frames;"), each word read as auto_reg reads
+    one, a stop inside it starting the next sentence."""
+    out, start = [], sentence_start
+    for part in re.split(r"([A-Za-z']+)", text):
+        if re.fullmatch(r"[A-Za-z']+", part):
+            out.append(auto_reg(_Word(part), start, heading, quote_start))
+            start, quote_start = False, False
+        else:
+            out.append(part)
+            # a stop ends the sentence unless a number follows it ("Gal. 5. 16, to the End")
+            if re.search(r"[.!?]\W*$", part):
+                start = True
+            elif re.search(r"\w", part):
+                start = False
+    return "".join(out)
 
 
 NO_SPACE_BEFORE = set(".,;:!?)]’'")
