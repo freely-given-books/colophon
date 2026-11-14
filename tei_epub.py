@@ -22,6 +22,10 @@ Options:
   --front FILE       XHTML fragment for the front matter (its own file)
   --before FILE      extra page before the TEI divisions; repeatable, in order
   --after FILE       extra page after them; repeatable, in order
+  --chapters DIR     a second edition (the Modern English): each division's text
+                     from DIR/<its layout file>.typ (chapters/modern), rendered
+                     with Typst's HTML export, in place of the TEI's (headings
+                     at the levels the TEI's pages give them)
   --typst-root DIR   Typst --root for .typ pages (default: the folder above
                      the TEI's source/ folder, i.e. the book folder)
   --cover FILE       cover image; gets a cover page and cover-image property
@@ -53,7 +57,7 @@ from pathlib import Path
 from lxml import etree
 
 import layout
-from tei_to_html import add_text_args, divisions, renderer, xhtml
+from tei_to_html import add_text_args, divisions, file_ident, renderer, xhtml
 
 MEDIA = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
          ".gif": "image/gif", ".svg": "image/svg+xml", ".css": "text/css",
@@ -237,6 +241,7 @@ def main():
     ap.add_argument("--before", action="append", default=[])
     ap.add_argument("--after", action="append", default=[])
     ap.add_argument("--typst-root")
+    ap.add_argument("--chapters")
     ap.add_argument("--toc-depth", type=int, default=3,
                     help="deepest heading in the contents: 3 (h3, the default) or "
                     "4 (also h4, e.g. a book's numbered sections)")
@@ -313,13 +318,24 @@ def main():
     r = renderer(a, root)
     r.note_no = notes_used[0]                    # notes are numbered through the book
     ndiv = 0
+    modern = {}
+    if a.chapters:
+        cdir = Path(a.chapters)
+        modern = {file_ident(p.relative_to(cdir).as_posix()): p for p in cdir.rglob("*.typ")}
     for n, (div_id, head, lines) in enumerate(divisions(root, r, layout.settings(a.tei), a.files)):
         name = f"{div_id}.xhtml"
+        if a.chapters and not div_id.startswith("part-"):
+            if div_id not in modern:
+                raise SystemExit(f"{a.chapters}: no file for {div_id}")
+            frag, k = typst_page(modern[div_id], typst_root, notes_used[0] + 1)
+            notes_used[0] += k
+            lines = [f'<section id="{div_id}">', frag, "</section>"]
         page(div_id, name, head, lines)
         ndiv += 1
         if n == 0:
             landmarks.append(("bodymatter", name, "Start of Content"))
-    notes_used[0] = r.note_no
+    if not a.chapters:
+        notes_used[0] = r.note_no
 
     for n, f in enumerate(a.after):
         extra_page(f, n, "after")
