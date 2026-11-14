@@ -24,8 +24,8 @@ Options:
   --after FILE       extra page after them; repeatable, in order
   --chapters DIR     a second edition (the Modern English): each division's text
                      from DIR/<its layout file>.typ (chapters/modern), rendered
-                     with Typst's HTML export, in place of the TEI's; headings
-                     one level up, as the TEI's pages set them
+                     with Typst's HTML export, in place of the TEI's (headings
+                     at the levels the TEI's pages give them)
   --typst-root DIR   Typst --root for .typ pages (default: the folder above
                      the TEI's source/ folder, i.e. the book folder)
   --cover FILE       cover image; gets a cover page and cover-image property
@@ -144,7 +144,7 @@ def ncx_doc(title, ident, tree):
     return doc
 
 
-def typst_page(path, root, first_note, shift=0):
+def typst_page(path, root, first_note):
     """Render a Typst file with Typst's HTML export; return (XHTML body
     fragment, number of notes). Typst's endnotes become EPUB 3 footnotes,
     numbered on from first_note."""
@@ -169,9 +169,6 @@ def typst_page(path, root, first_note, shift=0):
                 etree.tostring(c, method="xml", encoding="unicode") for c in li)
             notes[li.get("id")] = inner
         sec.getparent().remove(sec)
-    for k in range(2, 7) if shift else ():
-        for h in body.iter(f"h{k}"):
-            h.tag = f"h{max(2, k - shift)}"
     frag = "".join(etree.tostring(c, method="xml", encoding="unicode", with_tail=True)
                    for c in body)
     if body.text and body.text.strip():
@@ -330,7 +327,7 @@ def main():
         if a.chapters and not div_id.startswith("part-"):
             if div_id not in modern:
                 raise SystemExit(f"{a.chapters}: no file for {div_id}")
-            frag, k = typst_page(modern[div_id], typst_root, notes_used[0] + 1, shift=1)
+            frag, k = typst_page(modern[div_id], typst_root, notes_used[0] + 1)
             notes_used[0] += k
             lines = [f'<section id="{div_id}">', frag, "</section>"]
         page(div_id, name, head, lines)
