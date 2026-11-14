@@ -581,7 +581,12 @@ def interior_of(cover, files):
     print file matches (a notional cover, e.g. one only for the ebook)."""
     suffix = Path(cover).stem.split("cover", 1)[-1]
     if not suffix:
-        return files[0] if len(files) == 1 else None
+        if len(files) == 1:
+            return files[0]
+        # a book with a Modern English edition: cover.typ wraps the Classic, the one print
+        # file that is neither the -modern one nor a volume
+        plain = [f for f in files if not re.search(r"-(modern|vol-\d+)$", Path(f).stem)]
+        return plain[0] if len(plain) == 1 else None
     hits = [f for f in files if Path(f).stem.endswith(suffix)]
     return hits[0] if len(hits) == 1 else None
 
