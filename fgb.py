@@ -27,7 +27,12 @@ works from any folder.
                                   checked EPUB into dist/<author>/<book>/;
                                   no BOOK = every book on the TEI pipeline
                                   and every print volume.
-                                  --pdf / --epub for one kind, --out DIR
+                                  --pdf / --epub for one kind, --out DIR,
+                                  --volume N (repeat, or 1,3): only those
+                                  volumes of a book in volumes, Classic and
+                                  Modern English (also for epub and pdf); a
+                                  working build: check and release always
+                                  take every volume
   ./fgb outline [BOOK] [--write]  outline levels from the author's numbering
                                   (and a later edition's marks: outline.json);
                                   the places to settle marked "?"; --write sets
@@ -466,9 +471,10 @@ def render_front(bk, cover, outdir, extra=(), root=REPO):
     return img
 
 
-def build_epub(bk, outdir, root=REPO):
+def build_epub(bk, outdir, root=REPO, volumes=None):
     """The EPUB(s) into outdir. root: the repository the book is in (another
-    checkout of it, for a book as it was at a sign-off)."""
+    checkout of it, for a book as it was at a sign-off). volumes: the volume
+    numbers to build (--volume), or None for all."""
     e = bk.cfg.get("EPUB")
     if not e:
         sys.exit(f"{bk.name}: no EPUB settings in source/editorial.py (see ./fgb --help)")
@@ -476,7 +482,10 @@ def build_epub(bk, outdir, root=REPO):
         # one EPUB per volume: each entry overrides the shared settings and
         # names its layout files by path prefix ("files": ["vol-1/"])
         outs = []
-        for v in e["volumes"]:
+        for i, v in enumerate(e["volumes"]):
+            n = epub_volume(v, i)
+            if volumes is not None and n not in volumes:
+                continue
             shared = {**{k: x for k, x in e.items() if k != "volumes"},
                       **{k: x for k, x in v.items() if k != "modern"}}
             outs += build_one_epub(bk, outdir, shared, root)
@@ -484,6 +493,8 @@ def build_epub(bk, outdir, root=REPO):
                 # a volume's Modern English edition (Gouge, volume 1): the volume's
                 # files, its text from the modern chapters
                 outs += build_one_epub(bk, outdir, {**shared, **v["modern"]}, root)
+            elif volumes is not None and any(x.get("modern") for x in e["volumes"]):
+                print(f"volume {n}: no Modern English edition, skipped")
         return outs
     outs = build_one_epub(bk, outdir, e, root)
     if e.get("modern"):
@@ -627,12 +638,50 @@ def cover_ground(bk, cover, extra, root=REPO):
     return ["--input", "background=/" + img.resolve().relative_to(Path(root).resolve()).as_posix()]
 
 
-def build_pdf(bk, outdir, covers=False, problems=None, root=REPO):
+def file_volume(name):
+    """The volume a print or cover file belongs to (domestical-duties-vol-2.typ,
+    cover-vol-1-modern.typ: 2, 1), or None for a file of no volume."""
+    m = re.search(r"-vol-(\d+)(?:-|$)", Path(name).stem)
+    return int(m.group(1)) if m else None
+
+
+def epub_volume(v, i):
+    """An EPUB["volumes"] entry's number: from its files' "vol-N/" prefix, else
+    its place in the list (from 1)."""
+    m = re.match(r"vol-(\d+)/", (v.get("files") or [""])[0])
+    return int(m.group(1)) if m else i + 1
+
+
+def check_volumes(bk, volumes):
+    """--volume N for a book: the numbers must be volumes the book has. A
+    working build of some volumes only: release, sign-off and ./fgb check
+    always take the whole book."""
+    if not volumes:
+        return
+    vols = bk.cfg.get("EPUB", {}).get("volumes")
+    if not vols:
+        sys.exit(f"{bk.name} is not in volumes (no EPUB[\"volumes\"]): --volume does not apply")
+    have = {epub_volume(v, i) for i, v in enumerate(vols)}
+    missing = sorted(set(volumes) - have)
+    if missing:
+        sys.exit(f"{bk.name} has volumes {', '.join(map(str, sorted(have)))}, "
+                 f"not {', '.join(map(str, missing))}")
+
+
+def in_volumes(name, volumes):
+    """A print or cover file is built for --volume (None: every file)."""
+    return volumes is None or file_volume(name) in volumes
+
+
+def build_pdf(bk, outdir, covers=False, problems=None, root=REPO, volumes=None):
     """The print PDFs (and covers) into outdir. root: the repository the book
-    is in (another checkout of it, for a book as it was at a sign-off)."""
+    is in (another checkout of it, for a book as it was at a sign-off).
+    volumes: the volume numbers to build (--volume), or None for all."""
     files = bk.cfg.get("PRINT") or [bk.dir.name + ".typ"]
     cover_files = (bk.cfg.get("COVERS") or
                    sorted(p.name for p in bk.dir.glob("cover*.typ"))) if covers else []
+    files = [f for f in files if in_volumes(f, volumes)]
+    cover_files = [f for f in cover_files if in_volumes(f, volumes)]
     outs, geometry, grounds = [], {}, {}
     for f in files + cover_files:
         src = bk.dir / f
@@ -687,14 +736,28 @@ def dist_dir(bk, root=None):
     return d
 
 
+def volume_numbers(given):
+    """--volume 1 --volume 3 or --volume 1,3: the numbers, or None (all)."""
+    if not given:
+        return None
+    try:
+        return sorted({int(x) for g in given for x in g.split(",") if x.strip()})
+    except ValueError:
+        sys.exit(f"--volume takes volume numbers (1, 2 or 1,3), not {' '.join(given)}")
+
+
 def cmd_epub(a):
     bk = Book(find_book(a.book))
-    build_epub(bk, dist_dir(bk))
+    vols = volume_numbers(a.volume)
+    check_volumes(bk, vols)
+    build_epub(bk, dist_dir(bk), volumes=vols)
 
 
 def cmd_pdf(a):
     bk = Book(find_book(a.book, volumes_too=True))
-    build_pdf(bk, dist_dir(bk))
+    vols = volume_numbers(a.volume)
+    check_volumes(bk, vols)
+    build_pdf(bk, dist_dir(bk), volumes=vols)
 
 
 def cmd_ocr(a):
@@ -839,6 +902,10 @@ def cmd_build(a):
             print("not on the TEI pipeline yet, skipped: " +
                   ", ".join(str(d.relative_to(REPO / "books")) for d in skipped))
     kinds = {"pdf", "epub"} if a.pdf == a.epub else ({"pdf"} if a.pdf else {"epub"})
+    vols = volume_numbers(a.volume)
+    if vols:
+        for d in chosen:
+            check_volumes(Book(d), vols)
     state = git_state()
     built, failed = [], []
     for d in chosen:
@@ -848,12 +915,12 @@ def cmd_build(a):
         try:
             files = []
             if "pdf" in kinds:
-                files += build_pdf(bk, outdir, covers=True)
+                files += build_pdf(bk, outdir, covers=True, volumes=vols)
             if bk.volume:
                 # print only: its books' ebooks are their own
                 print(f"a print volume of {', '.join(bk.parts())}: no EPUB")
             elif "epub" in kinds:
-                epubs = build_epub(bk, outdir)
+                epubs = build_epub(bk, outdir, volumes=vols)
                 files += epubs + build_web(bk, outdir, files + epubs)
         except SystemExit as e:
             print(f"FAILED: {e}" if e.code not in (None, 0, 1) else "FAILED")
@@ -885,6 +952,9 @@ def main():
         p = sub.add_parser(name)
         p.add_argument("book", nargs="?")
         p.set_defaults(fn=fn)
+        if name in ("epub", "pdf"):
+            p.add_argument("--volume", action="append", metavar="N",
+                           help="only volume N of a book in volumes (repeat, or 1,3)")
         if name == "check":
             p.add_argument("--all", action="store_true",
                            help="every TEI book, in parallel (after a change to colophon)")
@@ -895,6 +965,9 @@ def main():
     p.add_argument("--pdf", action="store_true", help="only the PDFs")
     p.add_argument("--epub", action="store_true", help="only the EPUB")
     p.add_argument("--out", help="output folder (default: dist/ at the repo root)")
+    p.add_argument("--volume", action="append", metavar="N",
+                   help="only volume N of a book in volumes, Classic and Modern English "
+                        "(repeat, or 1,3); a working build: check and release take every volume")
     p.set_defaults(fn=cmd_build)
     p = sub.add_parser("page")
     p.add_argument("book", nargs="?")

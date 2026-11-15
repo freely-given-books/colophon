@@ -184,6 +184,13 @@ note as `#auto` spacing readings (`note_spaces`).
 `./fgb` (`fgb.py`; `./fgb --help`) is the day-to-day command; the books
 repository's `CLAUDE.md` lists its uses.
 
+`./fgb build|pdf|epub BOOK --volume N` (repeatable, or `1,3`; colophon 0.56.0) builds only those
+volumes of a book in volumes (`EPUB["volumes"]`: Gouge's Domestical Duties, Calvin's Institutes), its
+Classic and, where a volume has one (`"modern"` in its entry), its Modern English edition; a chosen
+volume without a Modern English edition is skipped with a message. It is for working builds and drafts:
+`./fgb check` still checks the whole book, and release, sign-off and `make` build every volume from one
+commit and one colophon (no per-volume signing).
+
 `./fgb build` and `./fgb release make` also make, for each EPUB (each
 volume), the reader page and the public comparison page (`fgb.build_web`):
 `<book>-vN-reader.html` and `<book>-vN-compare.html` in a release, linked to
