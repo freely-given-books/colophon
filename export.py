@@ -12,14 +12,16 @@ Claude (in the books-freelygiv-ing repository) how to bring it in.
 
 DIR gets:
   IMPORT.md             the import, step by step, for Claude in the site repo
-  site.json             per book: slug, title, author, version, summary, page
-                        counts, Lulu links, files, a note for the import
+  site.json             per book: slug, title, author, version, summary, year,
+                        description, tags, page counts, Lulu links, files, a
+                        note for the import; print-only volumes apart
   catalog.json          the release's full record (as `release make` wrote it)
   <author>/<book>/      the print PDFs and covers, EPUBs, front covers, and a
                         print-ready ZIP (interior and cover) per print PDF
 
-Lulu links and notes come from books/publishing.toml in the books repository
-(outside the book folders, so editing it never holds a signed-off book back).
+Lulu links, notes and each book's year, description and tags come from
+books/publishing.toml in the books repository (outside the book folders, so
+editing it never holds a signed-off book back).
 
 A book whose cover is made outside the repository (no cover*.typ, so the
 release has no cover files) still gets its front cover: the image its EPUB
@@ -56,10 +58,13 @@ the owner the plan (which books change, which are new) before writing.
 ## What is here
 
 - `site.json`: one entry per book: `book` (`<author>/<book>`), `slug` (the
-  site's book slug), `title`, `author`, `version`, `summary`, `pages` (each
+  site's book slug), `title`, `author`, `version`, `summary`, `year` (first
+  published), `description` (a sentence or two for readers), `tags`, `pages` (each
   print PDF's page count), `lulu` (the paperback's Lulu page; a list, one per
   volume, for a book in volumes; `""` = none yet), `note` (anything particular
-  to this book's import: follow it), `files`.
+  to this book's import: follow it), `files`. `print_volumes`: paperbacks that
+  bind other books together (Owen on Sin), with their books and Lulu link;
+  each of those books has its own entry with its ebook.
 - `catalog.json`: the full release record (sign-offs, sources, witnesses,
   fidelity counts). Reference only.
 - `<author>/<book>/`:
@@ -92,9 +97,9 @@ the owner the plan (which books change, which are new) before writing.
 
 Books not yet on the site (no `data/src/books/<slug>/`): scaffold them as
 `add-book.js` would (one-element YAML array, `path`, `cover: cover.jpg`,
-`license: CC0`, `addedDate` today, `sortTitle`, the `year` of first
-publication), with `title` and `summary` from `site.json` for the
-description; ask the owner for anything else. A new author also needs
+`license: CC0`, `addedDate` today, `sortTitle`), with `year`,
+`description` and `tags` from `site.json` (`summary` if it has no
+description); ask the owner for anything else. A new author also needs
 `data/src/<person-slug>/person.yaml` and a photo (ask the owner).
 
 A book in volumes (`pages` lists several PDFs) is best one site book per
@@ -221,13 +226,26 @@ def site_manifest(rel):
     """site.json for a release folder: what books.freely.giving needs to pull
     the release straight from GitHub (its sync-freely-given script). Per book
     one edition per site page (one per volume for a book in volumes), each
-    with the site's slug, its Lulu link, its page count and its files by kind.
-    Lulu links, slugs and notes come from books/publishing.toml."""
+    with the site's slug, its Lulu link, its page count and its files by kind,
+    and per book the year first published, a reader's description and tags
+    (default ["classic"]), so the site's sync needs no hand edits. Lulu links,
+    slugs, notes and those come from books/publishing.toml. A print volume (no
+    ebook: Owen on Sin) is not an edition the site can list, so it goes under
+    print_volumes, with its books and Lulu link, not under books."""
     cat = json.loads((rel / "catalog.json").read_text(encoding="utf-8"))
     pub = tomllib.loads(PUBLISHING.read_text(encoding="utf-8")) if PUBLISHING.exists() else {}
-    books = []
+    books, print_volumes = [], []
     for b in cat["books"]:
         p = pub.get(b["book"], {})
+        if not any(kind(f["name"]) == "epub" for f in b["files"]):
+            # a print volume: its books are editions of their own, with their ebooks
+            volume = REPO / "books" / b["book"] / "volume.toml"
+            members = tomllib.loads(volume.read_text(encoding="utf-8")).get("books", []) \
+                if volume.exists() else []
+            print_volumes.append({"book": b["book"], "title": b["title"], "author": b["author"],
+                                  "version": b["version"], "books": members,
+                                  "lulu": p.get("lulu", ""), "note": p.get("note", "")})
+            continue
         slug = p.get("slug", b["folder"])
         vols = {}
         for f in dict.fromkeys(f["name"] for f in b["files"]):
@@ -249,10 +267,12 @@ def site_manifest(rel):
                 "files": files})
         books.append({"book": b["book"], "title": b["title"], "author": b["author"],
                       "version": b["version"], "summary": b["summary"],
+                      "year": p.get("year"), "description": p.get("description", ""),
+                      "tags": p.get("tags", ["classic"]),
                       "note": p.get("note", ""), "editions": editions})
     data = {"schema": 1, "release": cat["release"],
             "download": f"https://github.com/{GITHUB}/releases/download/{cat['release']}/",
-            "books": books}
+            "books": books, "print_volumes": print_volumes}
     (rel / "site.json").write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n",
                                    encoding="utf-8")
     return data
