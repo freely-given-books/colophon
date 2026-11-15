@@ -149,11 +149,15 @@ def typst_page(path, root, first_note):
     fragment, number of notes). Typst's endnotes become EPUB 3 footnotes,
     numbered on from first_note."""
     from lxml import html as lhtml
+    # Typst's HTML export ignores pad and align, and drops any footnote inside them (the outline
+    # levels' #pad, a centred block): the page is compiled with both reduced to their body
+    inc = "/" + Path(path).resolve().relative_to(Path(root).resolve()).as_posix()
+    src = f'#show pad: it => it.body\n#show align: it => it.body\n#include "{inc}"\n'
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "page.html"
         r = subprocess.run(["typst", "compile", "--root", str(root), "--features", "html",
-                            "--format", "html", str(path), str(out)],
-                           capture_output=True, text=True)
+                            "--format", "html", "-", str(out)],
+                           input=src, capture_output=True, text=True)
         if r.returncode:
             raise SystemExit(f"typst failed on {path}:\n{r.stderr}")
         body = lhtml.parse(str(out)).getroot().find("body")
