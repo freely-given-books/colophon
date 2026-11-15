@@ -145,7 +145,10 @@ def apply_to_token(t, target, log, label):
         log.append((label, "expansion", old, target))
         t.reg, t.resp, t.rtype = target, "#editor", "spelling"
         return
-    t.reg, t.resp, t.rtype = target, "#editor", classify(old or "", target)
+    rtype = classify(old or "", target)
+    if ((old or "").lower(), target.lower()) in S.EMENDATION_PAIRS:
+        rtype = "emendation"
+    t.reg, t.resp, t.rtype = target, "#editor", rtype
     log.append((label, t.rtype, old, target))
 
 

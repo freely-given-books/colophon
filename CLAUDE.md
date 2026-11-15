@@ -341,7 +341,7 @@ printed in capitals after a drop cap (GOD, COnsider), wrapped in
 it prints `#smallcaps[God]`. `DIAGRAM_LISTS(root)` (Perkins): the lists that
 are diagrams (genealogies printed as trees), `list[@rend="diagram"]`, set
 whole like an illustration in a `#[ #show: block.with(breakable: false) ...]`
-scope (two side by side, nothing between, in one); `ul.diagram` in the ebook. A `GAP_FIXES` entry may carry a fourth item, the resp
+scope (two side by side, nothing between, in one); `ul.diagram` in the ebook. `EMENDATION_PAIRS` (printed, reading) word pairs, lowercase, that the classifier would call spelling because they look alike but are another word (Perkins: intercession -> intermission): recorded as emendations. A `GAP_FIXES` entry may carry a fourth item, the resp
 (`"#editor"` for a gap filled by hand).
 
 Tables are read the way early printers meant them (`layout.table_reading`):
