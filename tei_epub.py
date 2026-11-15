@@ -25,7 +25,9 @@ Options:
   --chapters DIR     a second edition (the Modern English): each division's text
                      from DIR/<its layout file>.typ (chapters/modern), rendered
                      with Typst's HTML export, in place of the TEI's (headings
-                     at the levels the TEI's pages give them)
+                     at the levels the TEI's pages give them; outline levels,
+                     OUTLINE_MARKS, set-off blocks, epigraphs and signatures
+                     in the Classic's markup: edition_blocks)
   --typst-root DIR   Typst --root for .typ pages (default: the folder above
                      the TEI's source/ folder, i.e. the book folder)
   --cover FILE       cover image; gets a cover page and cover-image property
@@ -57,7 +59,8 @@ from pathlib import Path
 from lxml import etree
 
 import layout
-from tei_to_html import add_text_args, divisions, file_ident, renderer, xhtml
+from tei_to_html import (POINT_MARKS, add_text_args, divisions, epigraph_html, file_ident,
+                         outline_para, renderer, xhtml)
 
 MEDIA = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
          ".gif": "image/gif", ".svg": "image/svg+xml", ".css": "text/css",
@@ -190,16 +193,137 @@ def diagram_lists(body):
             uls[-1].tail = d.tail
         parent.remove(d)
 
+# Typst's HTML export ignores pad, align and a block's inset and width (and drops any footnote
+# inside pad or align): the page is compiled with each marked as a div (and a list set in, its
+# indent), which edition_blocks turns into the markup the Classic ebook gives the same blocks
+LAYOUT_SHOW = (
+    '#let fgb-styled = [#set text(red); x].func()\n'
+    '#show pad: it => html.elem("div", attrs: (class: "fgb-pad", "data-em": str(it.left.length.em)), it.body)\n'
+    '#show align: it => html.elem("div", attrs: (class: "fgb-align", "data-align": repr(it.alignment)), it.body)\n'
+    '#show block: it => if it.inset != (:) or it.width != auto {\n'
+    '  let kids = if it.body.func() == [].func() { it.body.children } else { (it.body,) }\n'
+    '  html.elem("div", attrs: (class: "fgb-block", "data-inset": repr(it.inset != (:)),\n'
+    '    "data-set": repr(kids.any(c => c.func() == fgb-styled)), "data-breakable": repr(it.breakable)),\n'
+    '    it.body)\n'
+    '} else { it }\n'
+    '#show enum: it => if it.indent != 0pt {\n'
+    '  html.elem("div", attrs: (class: "fgb-enum", "data-indent": repr(it.indent)), it)\n'
+    '} else { it }\n')
 
-def typst_page(path, root, first_note):
+
+def _inner(el):
+    """An element's content as XHTML."""
+    return (html.escape(el.text, quote=False) if el.text else "") + "".join(
+        etree.tostring(c, method="xml", encoding="unicode", with_tail=True) for c in el)
+
+
+def _replace(el, markup):
+    """Put the content of an XHTML fragment where el is (its tail kept)."""
+    from lxml import html as lhtml
+    new = lhtml.fragments_fromstring(markup) if markup.strip() else []
+    lead = new.pop(0) if new and isinstance(new[0], str) else ""
+    parent, i, tail = el.getparent(), el.getparent().index(el), el.tail or ""
+    parent.remove(el)
+    for k, n in enumerate(new):
+        parent.insert(i + k, n)
+    if new:
+        new[-1].tail = (new[-1].tail or "") + tail
+    else:
+        lead += tail
+    if lead:
+        before = parent[i - 1] if i else None
+        if before is None:
+            parent.text = (parent.text or "") + lead
+        else:
+            before.tail = (before.tail or "") + lead
+
+
+def _unwrap(el):
+    """Replace a marker div by its content."""
+    _replace(el, _inner(el))
+
+
+def _paras(el):
+    """A marker's paragraphs: its <p>s, or its inline content as one."""
+    ps = [c for c in el if c.tag == "p"]
+    return [_inner(c) for c in ps] if ps else ([_inner(el)] if _inner(el).strip() else [])
+
+
+def edition_blocks(body, counts=None, subtitle=False):
+    """The blocks of a Typst page (LAYOUT_SHOW's marked divs) as the Classic ebook sets
+    them (tei_to_html): a paragraph at an outline level (#pad) p.levelN, or with
+    OUTLINE_MARKS (counts, the book's point counts: mark_point) every paragraph its
+    point's mark and data-level; a list set in (#set enum(indent)) ol.indent / ol.levelN;
+    #block(inset) p.inset (a chapter summary, its text set smaller, p.inset summary);
+    #align(center) p.center (under the page's title p.subtitle, when the Classic's
+    page has one: subtitle), a bold block in it
+    p.subtitle.strong, an unbreakable block in it (a verse and its reference) div.epigraph; #align(right) p.signature (the first of a run signature-first);
+    small capitals span.smallcaps."""
+    for sp in body.iter("span"):
+        if (sp.get("style") or "").replace(" ", "") == "font-variant-caps:small-caps":
+            del sp.attrib["style"]
+            sp.set("class", "smallcaps")
+    for el in list(body):
+        cls = el.get("class") if el.tag == "div" else None
+        if el.tag == "p" and counts is not None:
+            _replace(el, outline_para(_inner(el), 0, counts))
+        elif cls == "fgb-pad":
+            lvl = layout.em_level(float(el.get("data-em")))
+            _replace(el, "".join(outline_para(t, lvl, counts) for t in _paras(el)))
+        elif cls == "fgb-enum":
+            em = el.get("data-indent")
+            c = "indent" if em.endswith("pt") else f"level{layout.em_level(float(em[:-2]))}"
+            for lst in el:
+                if lst.tag in ("ol", "ul"):
+                    lst.set("class", f"{c} {lst.get('class')}" if lst.get("class") else c)
+            _unwrap(el)
+        elif cls == "fgb-align" and el.get("data-align") == "right":
+            prev = el.getprevious()
+            first = not (prev is not None and prev.tag == "p" and
+                         "signature" in (prev.get("class") or "").split())
+            c = "signature signature-first" if first else "signature"
+            _replace(el, "".join(f'<p class="{c if k == 0 else "signature"}">{t}</p>'
+                                 for k, t in enumerate(_paras(el))))
+        elif cls == "fgb-align" and el.get("data-align") == "center":
+            blk = [c for c in el if c.get("class") == "fgb-block"]
+            prev = el.getprevious()
+            if len(el) == 1 and blk and not (el.text or "").strip() and \
+                    blk[0].get("data-breakable") == "false":
+                # an epigraph (kept whole): its verse, and its reference (the shorter) before
+                # or after it
+                ps = [c for c in blk[0] if c.tag == "p"] or [blk[0]]
+                by_len = sorted(ps, key=lambda c: len("".join(c.itertext())))
+                ref = by_len[0] if len(ps) > 1 else None
+                verse = next(c for c in ps if c is not ref)
+                _replace(el, epigraph_html(_inner(ref).strip() if ref is not None else "",
+                                           _inner(verse).strip(),
+                                           ref is not None and ps.index(verse) < ps.index(ref)))
+            elif len(el) == 1 and blk and not (el.text or "").strip():
+                # a printed chapter title under the heading, bold
+                t = re.sub(r"^<strong>(.*)</strong>$", r"\1", _inner(blk[0]).strip(), flags=re.S)
+                _replace(el, f'<p class="subtitle strong">{t}</p>')
+            else:
+                # a centred line under the page's title is its subtitle (a layout file's)
+                c = "subtitle" if subtitle and prev is not None and prev.getprevious() is None and \
+                    re.fullmatch(r"h[1-6]", prev.tag) else "center"
+                _replace(el, "".join(f'<p class="{c}">{t.strip()}</p>' for t in _paras(el)))
+        elif cls == "fgb-block" and el.get("data-inset") == "true":
+            c = "inset summary" if el.get("data-set") == "true" else "inset"
+            _replace(el, "".join(f'<p class="{c}">{t.strip()}</p>' for t in _paras(el)))
+    for el in list(body.iter("div")):       # any other marked block: its content
+        if (el.get("class") or "").startswith("fgb-"):
+            _unwrap(el)
+
+
+def typst_page(path, root, first_note, counts=None, subtitle=False):
     """Render a Typst file with Typst's HTML export; return (XHTML body
     fragment, number of notes). Typst's endnotes become EPUB 3 footnotes,
-    numbered on from first_note."""
+    numbered on from first_note. Its blocks are set as the Classic ebook sets them
+    (edition_blocks; counts: the book's OUTLINE_MARKS point counts, on a chapter;
+    subtitle: the Classic's page has a subtitle under its title)."""
     from lxml import html as lhtml
-    # Typst's HTML export ignores pad and align, and drops any footnote inside them (the outline
-    # levels' #pad, a centred block): the page is compiled with both reduced to their body
     inc = "/" + Path(path).resolve().relative_to(Path(root).resolve()).as_posix()
-    src = f'#show pad: it => it.body\n#show align: it => it.body\n{DIAGRAM_SHOW}#include "{inc}"\n'
+    src = f'{LAYOUT_SHOW}{DIAGRAM_SHOW}#include "{inc}"\n'
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "page.html"
         r = subprocess.run(["typst", "compile", "--root", str(root), "--features", "html",
@@ -209,6 +333,7 @@ def typst_page(path, root, first_note):
             raise SystemExit(f"typst failed on {path}:\n{r.stderr}")
         body = lhtml.parse(str(out)).getroot().find("body")
     diagram_lists(body)
+    edition_blocks(body, counts, subtitle)
     notes = {}
     sec = body.find(".//section[@role='doc-endnotes']")
     if sec is not None:
@@ -374,13 +499,24 @@ def main():
     if a.chapters:
         cdir = Path(a.chapters)
         modern = {file_ident(p.relative_to(cdir).as_posix()): p for p in cdir.rglob("*.typ")}
-    for n, (div_id, head, lines) in enumerate(divisions(root, r, layout.settings(a.tei), a.files)):
+    cfg = layout.settings(a.tei)
+    # OUTLINE_MARKS: the Modern English points marked as the Classic's are, counted through the book
+    counts = [0] * len(POINT_MARKS) if cfg.get("OUTLINE_MARKS") else None
+    for n, (div_id, head, lines) in enumerate(divisions(root, r, cfg, a.files)):
         name = f"{div_id}.xhtml"
-        if a.chapters and not div_id.startswith("part-"):
+        # a part page (its own title only) stays; a layout file's id may begin "part-" too
+        # (Religious Affections' part-1-01-the-text), so it is told by its section's class
+        part_page = bool(lines) and 'class="part"' in lines[0]
+        if a.chapters and not part_page:
             if div_id not in modern:
                 raise SystemExit(f"{a.chapters}: no file for {div_id}")
-            frag, k = typst_page(modern[div_id], typst_root, notes_used[0] + 1)
+            frag, k = typst_page(modern[div_id], typst_root, notes_used[0] + 1, counts,
+                                 any(x.startswith('<p class="subtitle">') for x in lines))
             notes_used[0] += k
+            # the layout's kicker over the title ("Part II · No Certain Sign I"), as the Classic's
+            kicker = next((x for x in lines if x.startswith('<p class="kicker">')), None)
+            if kicker:
+                frag = re.sub(r"(</h[1-6]>)", lambda m, k=kicker: m.group(1) + k, frag, count=1)
             lines = [f'<section id="{div_id}">', frag, "</section>"]
         page(div_id, name, head, lines)
         ndiv += 1

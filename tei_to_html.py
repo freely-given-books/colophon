@@ -149,6 +149,64 @@ def point_mark(k, n):
     return POINT_MARKS[k].format(n=n, s=sfx)
 
 
+def mark_point(lvl, t, counts):
+    """OUTLINE_MARKS: the class and text of a reg paragraph at outline level lvl, its
+    outline level set full width, and a numbered point marked by its level (POINT_MARKS: 1. (1.) [1.] 1st.
+    (1st.), as Goold marked Owen), with a little space before it (point{k}):
+      - an ordinal word ("First,", "Secondly,"): the mark before it, in grey, the
+        word in small capitals at the top level;
+      - a printed figure: at a set-in level a plain "1." restyled to the level's shape
+        (Watson's figures, the same at every depth); otherwise the level its shape
+        names (Goold's own marks, as CCEL keys them).
+    The print sets the same (scripts/outline_marks.typ in the books repository).
+    counts: the points numbered so far at each level (the book's, kept between
+    calls). The Modern English ebook (tei_epub.typst_page) marks its points here too."""
+    m = POINT_OPENING.match(t)
+    key = m.group(2).lower() if m else None
+    if key in outline.ORDINAL_WORDS or key == "lastly":
+        k = min(lvl, len(POINT_MARKS) - 1)
+        n = counts[k] + 1 if key == "lastly" else outline.ORDINAL_WORDS[key]
+        counts[k:] = [n] + [0] * (len(counts) - k - 1)
+        word = f'<span class="smallcaps">{m.group(2)}</span>' if lvl == 0 else m.group(2)
+        return (f"point point{k}", f'<span class="omark">{point_mark(k, n)}</span> '
+                f"{m.group(1)}{word}{t[m.end(2):]}")
+    f = POINT_FIGURE.match(t)
+    if not f:
+        return None, t
+    shaped = bool(f.group("open") or f.group("sfx"))
+    if lvl and not shaped:
+        k = min(lvl, len(POINT_MARKS) - 1)
+        n = int(f.group("n"))
+        return f"point point{k}", f"{f.group(1)}{point_mark(k, n)}{t[f.end():]}"
+    k = (4 if f.group("open") == "(" else 3) if f.group("sfx") else \
+        {"(": 1, "[": 2}.get(f.group("open"), 0)
+    return f"point point{k}", t
+
+
+def outline_para(t, lvl, counts=None):
+    """A reg paragraph at outline level lvl as the ebook sets it: with OUTLINE_MARKS
+    (counts, mark_point's) its point marked and its level kept for the reader's outline
+    (data-level: the set-in level, which headings start again, not the mark's); else
+    p.levelN when it is set in. Classic (tei_to_html) and Modern English
+    (tei_epub.typst_page) both, so they cannot drift."""
+    if counts is not None:
+        cls, t = mark_point(lvl, t, counts)
+        lv = f' data-level="{lvl}"'
+        return f'<p class="{cls}"{lv}>{t}</p>' if cls else f"<p{lv}>{t}</p>"
+    return f'<p class="level{lvl}">{t}</p>' if lvl else f"<p>{t}</p>"
+
+
+def epigraph_html(ref, body, after=False):
+    """An epigraph: its reference (before or after the verse) and the
+    verse, italic already (so an <em> around all of it is dropped)."""
+    body = tidy_em(body)
+    if re.fullmatch(r"<em>((?:(?!</?em>).)*)</em>", body, re.S):
+        body = body[4:-5]
+    ref_p = f'<p class="epigraph-ref">{ref}</p>' if ref else ""
+    text_p = f'<p class="epigraph-text">{body}</p>' if body else ""
+    return '<div class="epigraph">' + (text_p + ref_p if after else ref_p + text_p) + "</div>"
+
+
 class HtmlR(R):
     """R with XHTML output. Notes are collected per division by the caller."""
 
@@ -374,14 +432,7 @@ class HtmlR(R):
             out.append(html_)
 
     def epigraph_div(self, ref, body, after=False):
-        """An epigraph: its reference (before or after the verse) and the
-        verse, italic already (so an <em> around all of it is dropped)."""
-        body = tidy_em(body)
-        if re.fullmatch(r"<em>((?:(?!</?em>).)*)</em>", body, re.S):
-            body = body[4:-5]
-        ref_p = f'<p class="epigraph-ref">{ref}</p>' if ref else ""
-        text_p = f'<p class="epigraph-text">{body}</p>' if body else ""
-        return '<div class="epigraph">' + (text_p + ref_p if after else ref_p + text_p) + "</div>"
+        return epigraph_html(ref, body, after)
 
     def trailer(self, c):
         if self.layer == "orig":
@@ -483,37 +534,8 @@ class HtmlR(R):
     run_in = set()
 
     def mark_point(self, el, t):
-        """OUTLINE_MARKS: a reg paragraph's class and text, its outline level set full
-        width, and a numbered point marked by its level (POINT_MARKS: 1. (1.) [1.] 1st.
-        (1st.), as Goold marked Owen), with a little space before it (point{k}):
-          - an ordinal word ("First,", "Secondly,"): the mark before it, in grey, the
-            word in small capitals at the top level;
-          - a printed figure: at a set-in level a plain "1." restyled to the level's shape
-            (Watson's figures, the same at every depth); otherwise the level its shape
-            names (Goold's own marks, as CCEL keys them).
-        The print sets the same (scripts/outline_marks.typ in the books repository)."""
-        lvl = layout.para_level(el) or 0
-        m = POINT_OPENING.match(t)
-        key = m.group(2).lower() if m else None
-        if key in outline.ORDINAL_WORDS or key == "lastly":
-            k = min(lvl, len(POINT_MARKS) - 1)
-            counts = self.point_counts
-            n = counts[k] + 1 if key == "lastly" else outline.ORDINAL_WORDS[key]
-            counts[k:] = [n] + [0] * (len(counts) - k - 1)
-            word = f'<span class="smallcaps">{m.group(2)}</span>' if lvl == 0 else m.group(2)
-            return (f"point point{k}", f'<span class="omark">{point_mark(k, n)}</span> '
-                    f"{m.group(1)}{word}{t[m.end(2):]}")
-        f = POINT_FIGURE.match(t)
-        if not f:
-            return None, t
-        shaped = bool(f.group("open") or f.group("sfx"))
-        if lvl and not shaped:
-            k = min(lvl, len(POINT_MARKS) - 1)
-            n = int(f.group("n"))
-            return f"point point{k}", f"{f.group(1)}{point_mark(k, n)}{t[f.end():]}"
-        k = (4 if f.group("open") == "(" else 3) if f.group("sfx") else \
-            {"(": 1, "[": 2}.get(f.group("open"), 0)
-        return f"point point{k}", t
+        """OUTLINE_MARKS: a reg paragraph's class and text (mark_point)."""
+        return mark_point(layout.para_level(el) or 0, t, self.point_counts)
 
     def div_html(self, div, level):
         """Layout mode: a division's heads (h{level+1}, or a bold run-in
@@ -672,14 +694,9 @@ class HtmlR(R):
                         self.add_block(out, c, f'<p class="quote">{t}</p>')
                 elif t and self.layer == "reg" and c.get("rend") in ("center", "inset"):
                     self.add_block(out, c, f'<p class="{c.get("rend")}">{t}</p>')
-                elif t and self.layer == "reg" and self.outline_marks:
-                    cls, t = self.mark_point(c, t)
-                    # every paragraph keeps its outline level for the reader's outline
-                    # (the set-in level, which headings start again: not the mark's)
-                    lv = f' data-level="{layout.para_level(c) or 0}"'
-                    self.add_block(out, c, f'<p class="{cls}"{lv}>{t}</p>' if cls else f"<p{lv}>{t}</p>")
-                elif t and self.layer == "reg" and layout.para_level(c):
-                    self.add_block(out, c, f'<p class="level{layout.para_level(c)}">{t}</p>')
+                elif t and self.layer == "reg" and (self.outline_marks or layout.para_level(c)):
+                    self.add_block(out, c, outline_para(
+                        t, layout.para_level(c) or 0, self.point_counts if self.outline_marks else None))
                 elif t:
                     self.add_block(out, c, f"<p>{t}</p>")
                 else:
