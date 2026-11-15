@@ -57,7 +57,9 @@ has to remember options:
           "css": [...], "before": [...],  # front panel is rendered
           "after": [...], "toc_depth": 4, # paths from the book folder
           "volumes": [{"files": ["vol-1/"], "title": ..., "file": ...,
-                       "cover": ..., "front": ...}, ...],  # one EPUB each
+                       "cover": ..., "front": ...,
+                       "modern": {...}}, ...],  # one EPUB each (and its
+                                  # volume's Modern English, as "modern" below)
           "modern": {"chapters": "chapters/modern", "file": ...,
                      "cover": "cover-modern.typ", ...}}  # the Modern English
                                   # edition: its text from chapters/modern, the
@@ -475,8 +477,13 @@ def build_epub(bk, outdir, root=REPO):
         # names its layout files by path prefix ("files": ["vol-1/"])
         outs = []
         for v in e["volumes"]:
-            outs += build_one_epub(bk, outdir, {**{k: x for k, x in e.items()
-                                                    if k != "volumes"}, **v}, root)
+            shared = {**{k: x for k, x in e.items() if k != "volumes"},
+                      **{k: x for k, x in v.items() if k != "modern"}}
+            outs += build_one_epub(bk, outdir, shared, root)
+            if v.get("modern"):
+                # a volume's Modern English edition (Gouge, volume 1): the volume's
+                # files, its text from the modern chapters
+                outs += build_one_epub(bk, outdir, {**shared, **v["modern"]}, root)
         return outs
     outs = build_one_epub(bk, outdir, e, root)
     if e.get("modern"):
@@ -497,8 +504,9 @@ def build_web(bk, outdir, built, link=lambda name: name):
     vols = e.get("volumes") or [None]
     names = {f.name: f for f in built}
     outs = []
-    m = e.get("modern")
-    if m and m.get("file") in names:
+    for m in [e.get("modern")] + [v.get("modern") for v in e.get("volumes", [])]:
+        if not (m and m.get("file") in names):
+            continue
         epub = names[m["file"]]
         pdf = names.get(epub.stem + ".pdf")
         reader = outdir / f"{epub.stem}-reader.html"
