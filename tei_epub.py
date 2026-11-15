@@ -144,6 +144,53 @@ def ncx_doc(title, ident, tree):
     return doc
 
 
+# A diagram (`#[ ... ] <diagram>`, a genealogy printed as a tree: the template's `diagram` in print)
+# loses its label in Typst's HTML export, and its lists run together with the next diagram's. Each
+# blank-line group of the labelled scope (one tree) is kept apart in a marked div, which
+# diagram_lists turns into the ebook's `ul.diagram`, as tei_to_html writes it for the Classic.
+DIAGRAM_SHOW = (
+    '#show <diagram>: it => {\n'
+    '  let groups = ((),)\n'
+    '  for c in (if it.has("children") { it.children } else { (it,) }) {\n'
+    '    if c.func() == parbreak { groups.push(()) } else { groups.last().push(c) }\n'
+    '  }\n'
+    '  html.elem("div", attrs: (class: "fgb-diagram"), for g in groups.filter(g => g.any(c => c.func() == list.item)) {\n'
+    '    html.elem("div", attrs: (class: "fgb-tree"), g.join())\n'
+    '  })\n'
+    '}\n')
+
+
+def diagram_lists(body):
+    """Each marked tree's list becomes `ul.diagram`, its items' text out of Typst's <p>, the
+    marking divs gone (the ebook's markup for a diagram, ebook.css)."""
+    for d in list(body.iter("div")):
+        if d.get("class") != "fgb-diagram":
+            continue
+        uls = [ul for t in d.findall("div") if t.get("class") == "fgb-tree" for ul in t.findall("ul")]
+        for ul in uls:
+            ul.set("class", "diagram")
+            for li in ul.iter("li"):
+                p = li.find("p")
+                if p is None or li.index(p) != 0 or (li.text or "").strip():
+                    continue
+                kids, tail = list(p), p.tail or ""
+                li.text = p.text
+                li.remove(p)
+                for k, c in enumerate(kids):
+                    li.insert(k, c)
+                if kids:
+                    kids[-1].tail = (kids[-1].tail or "") + tail
+                else:
+                    li.text = (li.text or "") + tail
+        parent, i = d.getparent(), d.getparent().index(d)
+        for k, ul in enumerate(uls):
+            ul.tail = None
+            parent.insert(i + k, ul)
+        if uls:
+            uls[-1].tail = d.tail
+        parent.remove(d)
+
+
 def typst_page(path, root, first_note):
     """Render a Typst file with Typst's HTML export; return (XHTML body
     fragment, number of notes). Typst's endnotes become EPUB 3 footnotes,
@@ -152,7 +199,7 @@ def typst_page(path, root, first_note):
     # Typst's HTML export ignores pad and align, and drops any footnote inside them (the outline
     # levels' #pad, a centred block): the page is compiled with both reduced to their body
     inc = "/" + Path(path).resolve().relative_to(Path(root).resolve()).as_posix()
-    src = f'#show pad: it => it.body\n#show align: it => it.body\n#include "{inc}"\n'
+    src = f'#show pad: it => it.body\n#show align: it => it.body\n{DIAGRAM_SHOW}#include "{inc}"\n'
     with tempfile.TemporaryDirectory() as tmp:
         out = Path(tmp) / "page.html"
         r = subprocess.run(["typst", "compile", "--root", str(root), "--features", "html",
@@ -161,6 +208,7 @@ def typst_page(path, root, first_note):
         if r.returncode:
             raise SystemExit(f"typst failed on {path}:\n{r.stderr}")
         body = lhtml.parse(str(out)).getroot().find("body")
+    diagram_lists(body)
     notes = {}
     sec = body.find(".//section[@role='doc-endnotes']")
     if sec is not None:
