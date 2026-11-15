@@ -111,6 +111,13 @@ DIAGRAM_LISTS = None
 PARALLEL_TABLES = None
 
 
+# Editor changes the reg/@type classifier would call spelling because the
+# words look alike, but that are another word: (printed, reading) pairs,
+# lowercase, recorded as emendations (Perkins: "intercession" ->
+# "intermission", a misprint).
+EMENDATION_PAIRS = set()
+
+
 # The early-modern machine pass (spelling engine, sentence case, common-noun
 # lowercasing). A book from a modern source (CCEL) turns it off: its words
 # stay as given, and only TYPOGRAPHY and the review change them.
@@ -147,7 +154,7 @@ def load_tables(path):
                  "EXPAND_ETC", "ITALIC_SENTENCE_QUIRK", "DROP_CAP_CASE",
                  "MODERNIZE", "TYPOGRAPHY", "DASH", "AUTHOR", "QUOTE_START_CASE",
                  "OPENING_SMALLCAPS", "SMALLCAPS_PHRASES", "DIAGRAM_LISTS",
-                 "PARALLEL_TABLES", "MODERNIZE_FILLS"):
+                 "PARALLEL_TABLES", "MODERNIZE_FILLS", "EMENDATION_PAIRS"):
         if name in ns:
             g[name] = ns[name]
     # the book's own spellings, over the shared table (e.g. Gouge keeps
