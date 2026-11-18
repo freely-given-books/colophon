@@ -224,8 +224,8 @@ counting); the Modern has `<author>/<book>/modern/vN`, its own versions from v1 
 revision N of the Modern's listing, never tied to the Classic's: `sign --modern [N] [--point]`,
 a first Modern may be v2), its own `books/revisions.json` id `<author>/<book>/modern`, its own
 `ready --modern` (publishing.toml `["<author>/<book>/modern"]`, where its Lulu link goes), and
-its own part of `RELEASE.toml`, a `[modern]` table (`summary`; `based_on`, the Classic version
-its text follows; `accepted_print`), which `record` writes or adds. Each sign-off covers its
+its own part of `RELEASE.toml`, a `[modern]` table (`based_on`, the Classic version
+its text follows; `accepted_print`; no summary of its own unless it should differ: the catalog gives it the book's), which `record` writes or adds. Each sign-off covers its
 own files and the shared ones, by what each build reads (`release.classifier`: the files each
 edition's print, cover and EPUB settings start from, and every file those name): Modern
 `chapters/modern/`, `*-modern.typ`, `ebook-front-modern.html`; Classic `chapters/typ/`, the

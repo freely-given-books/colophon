@@ -250,9 +250,14 @@ def test_record_adds_a_modern_table(lib, monkeypatch, capsys):
     release.cmd_record(SimpleNamespace(book="b"))
     rec = tomllib.loads((lib / "RELEASE.toml").read_text(encoding="utf-8"))
     assert rec["summary"] == "The book."
-    assert rec["modern"] == {"summary": "", "based_on": "v2"}
+    assert rec["modern"] == {"based_on": "v2"}
     s = release.state(lib, release.MODERN)
-    assert release.gate_record(s) == ["no summary in RELEASE.toml's [modern] table"]
+    assert release.gate_record(s) == []   # no summary of its own: the book's is used
+
+
+def test_modern_entry_takes_the_books_summary():
+    rec = {"summary": "The book.", "modern": {"based_on": "v2"}}
+    assert (release.modern_record(rec).get("summary") or rec["summary"]) == "The book."
 
 
 def test_modern_record_gate(lib):

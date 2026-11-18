@@ -121,7 +121,9 @@ from the TEI) belongs to the Classic's entry; the Modern's has its PDF, cover,
 EPUB and reader page. The Modern's RELEASE.toml part:
 
   [modern]
-  summary = "..."          # required: the catalog's sentence or two
+  summary = "..."          # optional: the catalog's sentence or two; without
+                           # it the Modern takes the book's own summary (the
+                           # editor's wish: the same book, not a jarring change)
   based_on = "v2"          # the Classic version its text follows; if given, a
                            # sign-off of the Classic must exist
   accepted_print = [...]   # as the Classic's, for the Modern's print PDF
@@ -552,13 +554,13 @@ def modern_record(rec):
 
 
 def gate_modern_record(s):
-    """The Modern English edition's part of RELEASE.toml, its [modern] table: a
-    summary for the catalog; based_on, the Classic version its text follows,
-    if given, a sign-off of the Classic."""
+    """The Modern English edition's part of RELEASE.toml, its [modern] table:
+    based_on, the Classic version its text follows, if given, a sign-off of the
+    Classic; a summary of its own only if it should differ from the book's."""
     m = s["record"].get("modern")
     if not isinstance(m, dict):
         return [f"no [modern] table in {RECORD} (./fgb release record {s['slug']} adds one)"]
-    bad = [] if m.get("summary") else [f"no summary in {RECORD}'s [modern] table"]
+    bad = []
     v = m.get("based_on")
     if v and git("rev-parse", "-q", "--verify", f"refs/tags/{s['slug']}/{v}",
                  check=False).returncode:
@@ -860,8 +862,8 @@ def modern_table(d):
         f"# on its own ({unit(d, MODERN)}/vN: ./fgb release sign BOOK --modern), with",
         "# its own Lulu revisions. A change to this table holds back only it.",
         "[modern]",
-        "# One or two sentences for the release catalog: the edition, what it is made from.",
-        'summary = ""',
+        "# The catalog uses the book's summary above; give the Modern its own only if needed:",
+        '# summary = ""',
         "# The Classic version whose text it follows.",
         f"based_on = {json.dumps(v)}",
         "# Stray footnotes in its print PDF the editor accepts, each by its message:",
@@ -882,7 +884,7 @@ def cmd_record(a):
             path.write_text(text.rstrip("\n") + "\n\n" + "\n".join(modern_table(d)),
                             encoding="utf-8")
             print(f"{path.relative_to(REPO)}: added a [modern] table for the Modern English "
-                  "edition; fill in its summary, then commit it")
+                  "edition; check based_on, then commit it")
             return
         sys.exit(f"{path.relative_to(REPO)} exists; edit it by hand (a source's "
                  "checksum should never change: the sources are kept untouched)")
@@ -1315,7 +1317,7 @@ def entry(s, bk, files, carried=False):
         "folder": s["dir"].name,
         "title": edition_title(bk, s.get("edition")), "author": bk.author,
         "version": t["version"], "lulu_revision": version_key(t["tag"])[0],
-        "summary": part.get("summary", ""),
+        "summary": part.get("summary") or rec.get("summary", ""),
         **({"based_on": part.get("based_on", "")} if modern else {}),
         "signed_off": {"tag": t["tag"], "commit": t["commit"], "date": t["date"],
                        "signer": t["signer"], "note": t["note"],
