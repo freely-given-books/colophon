@@ -43,6 +43,8 @@ works from any folder.
   ./fgb release [--check]         which books are done (signed off, unchanged
                                   since); release.py has the rest:
   ./fgb release record|sign BOOK  a book's RELEASE.toml; the editor's sign-off
+                                  (--modern: of its Modern English edition, a
+                                  release of its own)
   ./fgb release make              every done book, checked and built, into
                                   dist/release/<date>/ and the stable branch
   ./fgb export DIR [--release R]  the newest release (or R) laid out for the
@@ -471,10 +473,12 @@ def render_front(bk, cover, outdir, extra=(), root=REPO):
     return img
 
 
-def build_epub(bk, outdir, root=REPO, volumes=None):
+def build_epub(bk, outdir, root=REPO, volumes=None, edition=None):
     """The EPUB(s) into outdir. root: the repository the book is in (another
     checkout of it, for a book as it was at a sign-off). volumes: the volume
-    numbers to build (--volume), or None for all."""
+    numbers to build (--volume), or None for all. edition: "classic" or
+    "modern", only that edition's EPUB(s), or None for both."""
+    classic, modern = edition != "modern", edition != "classic"
     e = bk.cfg.get("EPUB")
     if not e:
         sys.exit(f"{bk.name}: no EPUB settings in source/editorial.py (see ./fgb --help)")
@@ -488,16 +492,18 @@ def build_epub(bk, outdir, root=REPO, volumes=None):
                 continue
             shared = {**{k: x for k, x in e.items() if k != "volumes"},
                       **{k: x for k, x in v.items() if k != "modern"}}
-            outs += build_one_epub(bk, outdir, shared, root)
+            if classic:
+                outs += build_one_epub(bk, outdir, shared, root)
             if v.get("modern"):
                 # a volume's Modern English edition (Gouge, volume 1): the volume's
                 # files, its text from the modern chapters
-                outs += build_one_epub(bk, outdir, {**shared, **v["modern"]}, root)
-            elif volumes is not None and any(x.get("modern") for x in e["volumes"]):
+                if modern:
+                    outs += build_one_epub(bk, outdir, {**shared, **v["modern"]}, root)
+            elif modern and volumes is not None and any(x.get("modern") for x in e["volumes"]):
                 print(f"volume {n}: no Modern English edition, skipped")
         return outs
-    outs = build_one_epub(bk, outdir, e, root)
-    if e.get("modern"):
+    outs = build_one_epub(bk, outdir, e, root) if classic else []
+    if e.get("modern") and modern:
         outs += build_one_epub(bk, outdir, {**{k: x for k, x in e.items() if k != "modern"},
                                             **e["modern"]}, root)
     return outs
@@ -673,15 +679,30 @@ def in_volumes(name, volumes):
     return volumes is None or file_volume(name) in volumes
 
 
-def build_pdf(bk, outdir, covers=False, problems=None, root=REPO, volumes=None):
+def modern_name(name):
+    """A print or cover file of the Modern English edition: <book>-modern.typ,
+    cover-modern.typ, cover-vol-1-modern.typ."""
+    return bool(re.search(r"(^|-)modern(-|$)", Path(name).stem))
+
+
+def in_edition(name, edition):
+    """A print or cover file is built for one edition ("classic" or "modern", as
+    release.py signs them off one by one), or for both (None)."""
+    return edition is None or modern_name(name) == (edition == "modern")
+
+
+def build_pdf(bk, outdir, covers=False, problems=None, root=REPO, volumes=None,
+              edition=None):
     """The print PDFs (and covers) into outdir. root: the repository the book
     is in (another checkout of it, for a book as it was at a sign-off).
-    volumes: the volume numbers to build (--volume), or None for all."""
+    volumes: the volume numbers to build (--volume), or None for all.
+    edition: "classic" or "modern", only that edition's files (a release
+    signs each off on its own), or None for both."""
     files = bk.cfg.get("PRINT") or [bk.dir.name + ".typ"]
     cover_files = (bk.cfg.get("COVERS") or
                    sorted(p.name for p in bk.dir.glob("cover*.typ"))) if covers else []
-    files = [f for f in files if in_volumes(f, volumes)]
-    cover_files = [f for f in cover_files if in_volumes(f, volumes)]
+    files = [f for f in files if in_volumes(f, volumes) and in_edition(f, edition)]
+    cover_files = [f for f in cover_files if in_volumes(f, volumes) and in_edition(f, edition)]
     outs, geometry, grounds = [], {}, {}
     for f in files + cover_files:
         src = bk.dir / f
@@ -993,6 +1014,9 @@ def main():
                    "between Lulu revisions")
     p.add_argument("--clear", action="store_true",
                    help="ready: take back an earlier \"ready to sign\"")
+    p.add_argument("--modern", action="store_true",
+                   help="sign, ready: the book's Modern English edition, released on its own "
+                   "(tags <author>/<book>/modern/vN, its own Lulu revisions)")
     p.add_argument("--out", help="make: folder for the release (default: dist/release/)")
     p.add_argument("--trial", action="store_true",
                    help="make: take unverified sign-offs and an unreleased colophon; "

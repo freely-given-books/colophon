@@ -205,7 +205,7 @@ every step must check clean, or with a diff the editor has accepted. Two
 builds of the same tree compare clean (about two minutes for all books).
 
 `./fgb release` (`release.py`) says which books are done and makes releases
-of them: a book is done when the editor's signed tag `<author>/<book>/vN`
+of them: a book (or its Modern English edition, below) is done when the editor's signed tag `<author>/<book>/vN`
 holds (the folder unchanged since) and it passes the gates (its
 `RELEASE.toml` sources' checksums, a clean folder, `verify.py`, nothing
 unapplied in the review report, Lulu's rules, epubcheck). `make` builds
@@ -216,6 +216,32 @@ refuses a colophon that is not at a release tag (`--trial` takes it, and
 unverified tags, into `stable-trial`). It pushes nothing. Two builds of a
 book have the same text but not the same bytes yet: the PDF's creation date
 and the EPUB's `dcterms:modified` and zip times differ.
+
+**Two editions, two releases** (the editor's decision, 2026-11-17): a book with a Modern
+English edition is two release units, each its own Lulu paperback, signed off and held back on
+its own. The Classic keeps `<author>/<book>/vN` (old tags and `books/revisions.json` keep
+counting); the Modern has `<author>/<book>/modern/vN`, its own versions from v1 (Lulu's
+revision N of the Modern's listing, never tied to the Classic's: `sign --modern [N] [--point]`,
+a first Modern may be v2), its own `books/revisions.json` id `<author>/<book>/modern`, its own
+`ready --modern` (publishing.toml `["<author>/<book>/modern"]`, where its Lulu link goes), and
+its own part of `RELEASE.toml`, a `[modern]` table (`summary`; `based_on`, the Classic version
+its text follows; `accepted_print`), which `record` writes or adds. Each sign-off covers its
+own files and the shared ones, by what each build reads (`release.classifier`: the files each
+edition's print, cover and EPUB settings start from, and every file those name): Modern
+`chapters/modern/`, `*-modern.typ`, `ebook-front-modern.html`; Classic `chapters/typ/`, the
+Classic print file, `ebook-front.html` and `source/` (the TEI and what it is built from);
+shared `editorial.py`, `cover.typ` (every `cover-modern.typ` imports it), files both print
+files import (`stray-notes.typ`), CSS, `art/`, `README.md`. A change to `RELEASE.toml` counts
+for the edition whose part changed; the TEI also holds the Modern back when its divisions or
+headings change (the Modern EPUB takes its pages and contents from it). A Classic tag cut
+before 2026-11-17 covered the Modern files too: they are ignored when comparing with it. The
+Modern's gates are record, clean, print and epub (verify and report are the TEI's). `status`
+shows a second line `<author>/<book> (Modern)`; `make` gives each edition its own catalog
+entry (`unit`, `edition`, `lulu_revision`; the Modern's files are its PDF, cover, EPUB and
+reader page, the comparison page is the Classic's) and ships a Classic alone while its Modern
+is not signed off. In `stable` a folder is HEAD's when one edition is done, an edition
+carried beside it has its own files as at its tag (the shared files stay HEAD's). Print
+volumes print the Classic text: a Modern change never holds one back.
 
 **Print volumes** (colophon 0.43.0; first: Owen on Sin, 2026-11-10): a paperback made of
 other books' editions, each still its own book with its own TEI, ebook and sign-off. Its

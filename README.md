@@ -48,7 +48,10 @@ Outside `./fgb`: `uv run --project colophon python colophon/<script>.py`.
 `./fgb release` says which books the editor has signed off (a signed tag
 per book version) and makes a release of them: every check again, the
 built files with a catalog and checksums, and a `stable` branch holding
-only those books.
+only those books. A book's Modern English edition is a release of its own
+(its own paperback, tags `<author>/<book>/modern/vN` and Lulu revisions;
+`--modern` on `sign` and `ready`), each sign-off covering only its own
+edition's files and the shared ones.
 
 After any change to colophon, `./fgb check --all` rebuilds every book in
 parallel and must find each one as committed.
