@@ -639,8 +639,20 @@ def cover_ground(bk, cover, extra, root=REPO):
     print(f"typst: {cover.relative_to(root)} (ground, 300 ppi)")
     run("typst", "compile", "--root", root, *extra, "--input", "layer=ground",
         "--format", "png", "--ppi", "300", cover, raw, cwd=bk.dir)
-    run("magick", raw, "-alpha", "remove", "-alpha", "off", "-type", "TrueColor", img)
+    new = img.with_suffix(".new.png")
+    run("magick", raw, "-alpha", "remove", "-alpha", "off", "-type", "TrueColor", new)
     raw.unlink()
+    # keep the file as it is when the picture is the same: magick stamps each PNG it
+    # writes with the time, and a ground committed in a book's folder (A Divine
+    # Cordial's) would otherwise show as changed after every build and fail the
+    # release's clean gate on a signed book
+    same = img.exists() and subprocess.run(
+        ["magick", "compare", "-metric", "AE", img, new, "null:"],
+        capture_output=True, text=True).stderr.strip().split(" ")[0] in ("0", "0.0")
+    if same:
+        new.unlink()
+    else:
+        new.replace(img)
     return ["--input", "background=/" + img.resolve().relative_to(Path(root).resolve()).as_posix()]
 
 
