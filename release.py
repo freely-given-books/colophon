@@ -13,9 +13,14 @@ again. Books move on one at a time; none drops out of a release for it.
 
   ./fgb release                  every book with a RELEASE.toml or a tag:
                                  done, changed since its sign-off, or not
-                                 signed off; --check also runs the gates
+                                 signed off; a second line, "(Modern)", for
+                                 its Modern English edition; --check also
+                                 runs the gates, each edition's on its own
   ./fgb release record BOOK      write BOOK's RELEASE.toml (its source files
-                                 and their checksums), to fill in and commit
+                                 and their checksums), to fill in and commit;
+                                 for a book with a Modern English edition,
+                                 with a [modern] table (added to a record
+                                 that lacks one)
   ./fgb release sign BOOK [N]    run the gates on BOOK, then cut the signed
                                  tag <author>/<book>/vN (the editor's step;
                                  N: one past the last version,
@@ -23,12 +28,16 @@ again. Books move on one at a time; none drops out of a release for it.
   ./fgb release sign BOOK --point
                                  a point version, vN.1, vN.2, ...: an
                                  improved edition between Lulu revisions
+  ./fgb release sign BOOK --modern [N] [--point]
+                                 the same for the Modern English edition:
+                                 the tag <author>/<book>/modern/vN
   ./fgb release ready BOOK       the editor calls BOOK ready to sign as it
                                  stands (the signing waits for its Lulu
                                  revision): books/publishing.toml records the
                                  date and commit, and status shows it, or
                                  that the book has changed since; --clear
-                                 takes it back
+                                 takes it back; --modern for the Modern
+                                 English edition
   ./fgb release make             a release of every done book: the gates,
                                  then dist/release/<date>/ (PDFs, EPUBs,
                                  covers, reader and comparison pages,
@@ -60,6 +69,69 @@ covers from the vN tag and names them vN (the PDF is what Lulu has), and print
 corrections made since wait for the next whole version, N+1. Its sign-off says
 whether its print is still revision N's, page for page as rendered (the tag
 message, the catalog).
+
+Two editions, two releases (the editor's decision of 2026-11-17). A book
+with a Modern English edition (fgb.py: EPUB["modern"], chapters/modern) is two
+release units in one folder, each its own Lulu paperback, signed off and held
+back on its own:
+
+  Classic   tags <author>/<book>/vN, as before this change (the old tags and
+            books/revisions.json's <author>/<book> keep counting)
+  Modern    tags <author>/<book>/modern/vN, its own versions from v1 (and
+            point versions vN.M), books/revisions.json id <author>/<book>/modern
+
+Lulu sees the Modern as a book of its own: its vN is the Modern listing's Lulu
+revision N, never tied to the Classic's numbers. Its next version comes only
+from its own tags and revisions.json entries (a book whose Classic is at v14
+signs its first Modern v1); `sign --modern N` names one (Lulu bumps a book a
+revision when it is first put on sale, so a first Modern may be v2). A point
+version's "print the same as vN, page for page" is checked against that
+edition's own last print, so a print change in one edition never asks for a
+Lulu revision of the other.
+
+Each sign-off covers its own files and the shared ones. Which edition a file of
+the folder belongs to comes from what each build reads (classifier()): the
+files each edition starts from (its print and cover files, the files its EPUB
+settings name, its chapters folder), and every file of the folder those name in
+turn (a Typst #import/#include or image, an HTML src, a CSS url()):
+
+  Modern    read only by the Modern build: chapters/modern/, <book>-modern.typ,
+            cover-modern.typ, ebook-front-modern.html; a file read by neither,
+            by its name (chapters/modern/..., "-modern", source/modern-*)
+  Classic   read only by the Classic build: chapters/typ/, the Classic print
+            file, ebook-front.html, the side-by-side pages' files; and source/
+            (the TEI, its TCP/ThML source, supplements, witnesses, gap_fixes.py,
+            outline.json, review-report.md: what the TEI is built from)
+  shared    read by both, or by neither: source/editorial.py (both builds'
+            settings), cover.typ (every cover-modern.typ imports it: a change
+            to the Classic cover changes the Modern's), stray-notes.typ (both
+            print files import it), the CSS, art/, README.md
+  RELEASE.toml  its [modern] table is the Modern's, the rest the Classic's
+  the TEI   the Classic's, but the Modern EPUB takes its divisions and its
+            contents' headings from it: a change to those (tei_outline) holds
+            the Modern back too
+
+A change to a shared file holds back both. Comparing a Classic tag made before
+this change (when it covered the Modern files too) with now ignores the Modern
+files, so a book whose only changes since are the Modern's is done. A release
+ships each unit that is done (or carried, built from its own tag) as its own
+catalog entry with its own files; a book whose Modern is not signed off ships
+its Classic alone. The comparison page (the printed text beside the edition,
+from the TEI) belongs to the Classic's entry; the Modern's has its PDF, cover,
+EPUB and reader page. The Modern's RELEASE.toml part:
+
+  [modern]
+  summary = "..."          # optional: the catalog's sentence or two; without
+                           # it the Modern takes the book's own summary (the
+                           # editor's wish: the same book, not a jarring change)
+  based_on = "v2"          # the Classic version its text follows; if given, a
+                           # sign-off of the Classic must exist
+  accepted_print = [...]   # as the Classic's, for the Modern's print PDF
+
+Its gates are record ([modern]), clean, print and epub, on its own files and
+build; verify and report concern the TEI and are the Classic's. `ready
+--modern` records it in books/publishing.toml under ["<author>/<book>/modern"]
+(where its Lulu link goes too).
 
 A print volume (a folder with a volume.toml: a paperback made of other books'
 editions, fgb.py) is released like a book, with its own RELEASE.toml and signed
@@ -96,6 +168,8 @@ REPO = fgb.REPO
 RECORD = "RELEASE.toml"
 SIGNERS = REPO / "allowed_signers"
 BRANCH = "stable"
+# a book's two release units (Classic, Modern English)
+CLASSIC, MODERN = "classic", "modern"
 # the files a book's edition is made from, beside the TCP or ThML source
 SOURCE_EXTRA = ("*.supplied.xml", "*.witness.xml")
 
@@ -121,13 +195,24 @@ def slug(d):
     return str(d.relative_to(REPO / "books"))
 
 
+def unit(d, edition=CLASSIC):
+    """One edition's tag prefix and books/revisions.json id: <author>/<book>
+    for the Classic, <author>/<book>/modern for the Modern English."""
+    return slug(d) + ("/modern" if edition == MODERN else "")
+
+
+def tag_book(tag):
+    """<author>/<book>/v3 or <author>/<book>/modern/v1 -> <author>/<book>."""
+    return re.sub(r"(/modern)?/v[\d.]+$", "", tag)
+
+
 def version_key(tag):
     return [int(x) for x in re.findall(r"\d+", tag.rsplit("/v", 1)[-1])]
 
 
-def book_tags(d):
-    """The book's sign-off tags, newest version first."""
-    tags = [t for t in out("tag", "-l", f"{slug(d)}/v*").splitlines()
+def book_tags(d, edition=CLASSIC):
+    """The sign-off tags of one edition of the book, newest version first."""
+    tags = [t for t in out("tag", "-l", f"{unit(d, edition)}/v*").splitlines()
             if re.fullmatch(r"v\d+(\.\d+)*", t.rsplit("/", 1)[-1])]
     return sorted(tags, key=version_key, reverse=True)
 
@@ -159,19 +244,211 @@ def signature(tag):
     return False, "signature not verified: " + (msg.splitlines() or ["?"])[-1]
 
 
-def changed_since(d, tag):
-    """Files of the book's folder that differ from the tag, committed or not
-    (git-ignored files aside)."""
+def changed_since(d, rev, edition=None):
+    """Files of the book's folder that differ from rev (a tag, a commit),
+    committed or not (git-ignored files aside). With an edition, of a book
+    that has two, only those that hold that edition back (own_changes)."""
     rel = d.relative_to(REPO)
-    files = set(out("diff", "--name-only", tag, "--", rel).splitlines())
+    files = set(out("diff", "--name-only", rev, "--", rel).splitlines())
     files.update(uncommitted(d))
-    return sorted(f for f in files if f)
+    files = sorted(f for f in files if f)
+    if edition is None or editions(d) == [CLASSIC]:
+        return files
+    return own_changes(d, edition, rev, files)
 
 
 def uncommitted(d):
     """Files of the book's folder changed or added and not committed."""
     st = git("status", "--porcelain", "--", d.relative_to(REPO)).stdout
     return [l[3:] for l in st.splitlines() if l]
+
+
+# -- the two editions: which files are whose ----------------------------------
+
+def has_modern(bk):
+    """The book has a Modern English edition (EPUB["modern"], or a volume's)."""
+    e = bk.cfg.get("EPUB") or {}
+    return bool(e.get("modern") or any(v.get("modern") for v in e.get("volumes", [])))
+
+
+def editions(d):
+    """A book folder's release units: the Classic, and the Modern English when
+    the book has one (or one was signed off). A print volume has one."""
+    if (d / fgb.VOLUME).exists():
+        return [CLASSIC]
+    return [CLASSIC, MODERN] if has_modern(fgb.Book(d)) or book_tags(d, MODERN) \
+        else [CLASSIC]
+
+
+def edition_title(bk, edition):
+    if edition != MODERN:
+        return bk.title
+    m = (bk.cfg.get("EPUB") or {}).get("modern") or {}
+    return m.get("title") or f"{bk.title} (Modern English)"
+
+
+# the paths a print, cover or ebook file names, by its kind: a Typst string
+# ("cover.typ", "art/plate.jpg"), an HTML src or href, a CSS url(); comments
+# (a Typst // line or tail, an HTML <!-- -->) are left out first
+REFERENCES = {
+    ".typ": (re.compile(r"(?m)(^|\s)//.*$"), re.compile(r'"([^"\n]{1,200}?\.[A-Za-z0-9]{1,5})"')),
+    ".html": (re.compile(r"<!--.*?-->", re.S), re.compile(r'(?:src|href)="([^"]+)"')),
+    ".css": (re.compile(r"/\*.*?\*/", re.S), re.compile(r"url\(\s*['\"]?([^'\")]+)")),
+}
+REFERENCES[".xhtml"] = REFERENCES[".html"]
+# the settings of an EPUB entry that name files of the book
+EPUB_FILES = ("front", "cover", "css", "before", "after", "chapters")
+
+
+def references(p, d):
+    """The files of the book folder d that the file p names (a Typst #import,
+    #include or image, an HTML src, a CSS url())."""
+    if p.suffix not in REFERENCES:
+        return []
+    comment, path = REFERENCES[p.suffix]
+    text = comment.sub(" ", p.read_text(encoding="utf-8", errors="replace"))
+    found = []
+    for m in path.finditer(text):
+        try:
+            q = (p.parent / m.group(1)).resolve()
+            if q.is_file() and q.is_relative_to(d):
+                found.append(q)
+        except (OSError, ValueError):
+            continue
+    return found
+
+
+def reads(d, start):
+    """Every file of the book folder that a build starting from `start` (paths
+    in the folder; a folder stands for all its files) reads, as paths in the
+    folder: the files themselves and whatever they name, in turn."""
+    d = d.resolve()
+    todo = []
+    for f in start:
+        p = (d / f).resolve()
+        todo += sorted(x for x in p.rglob("*") if x.is_file()) if p.is_dir() else [p]
+    seen = set()
+    while todo:
+        p = todo.pop()
+        if p in seen or not p.is_file() or not p.is_relative_to(d):
+            continue
+        seen.add(p)
+        todo += references(p, d)
+    return {p.relative_to(d).as_posix() for p in seen}
+
+
+def edition_inputs(bk):
+    """(classic, modern): the files each edition's build starts from: its print
+    and cover files, the files its EPUB settings name (fgb.build_epub's), its
+    chapters (and the Classic's side-by-side pages)."""
+    e = bk.cfg.get("EPUB") or {}
+    base = {k: x for k, x in e.items() if k not in ("modern", "volumes")}
+    if e.get("volumes"):
+        classic = [{**base, **{k: x for k, x in v.items() if k != "modern"}}
+                   for v in e["volumes"]]
+        modern = [{**c, **v["modern"]} for c, v in zip(classic, e["volumes"])
+                  if v.get("modern")]
+    else:
+        classic = [base]
+        modern = [{**base, **e["modern"]}] if e.get("modern") else []
+    named = lambda cfgs: [f for c in cfgs for k in EPUB_FILES
+                          for f in ([c[k]] if isinstance(c.get(k), str) else c.get(k) or [])]
+    files = (bk.cfg.get("PRINT") or [bk.dir.name + ".typ"]) + \
+        (bk.cfg.get("COVERS") or sorted(p.name for p in bk.dir.glob("cover*.typ")))
+    side = bk.cfg.get("SIDE_BY_SIDE", {})
+    return ([f for f in files if not fgb.modern_name(f)] + named(classic) + ["chapters/typ"]
+            + side.get("before", []) + side.get("after", []),
+            [f for f in files if fgb.modern_name(f)] + named(modern) + ["chapters/modern"])
+
+
+def classifier(d, bk=None):
+    """which(path in the folder): the edition a file belongs to, CLASSIC or
+    MODERN for a file only that edition's build reads, None for a shared one
+    (both read it, or neither). A file neither build reads (or one gone) goes
+    by its name: chapters/modern/ and "-modern" names the Modern's,
+    chapters/typ/ and source/ (what the TEI is built from) the Classic's.
+    editorial.py and RELEASE.toml are shared (own_changes looks into the
+    record)."""
+    c_in, m_in = edition_inputs(bk or fgb.Book(d))
+    c, m = reads(d, c_in), reads(d, m_in)
+
+    def which(rel):
+        if rel in (RECORD, "source/editorial.py"):
+            return None
+        if rel in m or rel in c:
+            return None if rel in m and rel in c else MODERN if rel in m else CLASSIC
+        if rel.startswith("chapters/modern/") or \
+                re.search(r"(^|[-_])modern([-_.]|$)", rel.rsplit("/", 1)[-1]):
+            return MODERN
+        if rel.startswith(("chapters/typ/", "source/")):
+            return CLASSIC
+        return None
+    return which
+
+
+def blob(rev, path):
+    """A file's bytes at rev (None: not there); rev None: as it is on disk."""
+    if rev is None:
+        p = REPO / path
+        return p.read_bytes() if p.is_file() else None
+    r = subprocess.run(["git", "-C", str(REPO), "show", f"{rev}:{path}"], capture_output=True)
+    return r.stdout if r.returncode == 0 else None
+
+
+def record_part(data, edition):
+    """One edition's part of a RELEASE.toml: [modern] for the Modern, the rest
+    for the Classic (an unreadable record as its bytes: it differs)."""
+    if data is None:
+        return None
+    try:
+        rec = tomllib.loads(data.decode("utf-8"))
+    except (UnicodeDecodeError, tomllib.TOMLDecodeError):
+        return data
+    return rec.get("modern") if edition == MODERN else \
+        {k: v for k, v in rec.items() if k != "modern"}
+
+
+def tei_outline(data):
+    """A TEI's divisions and headings, in order: what the Modern EPUB takes
+    from it (tei_epub.py --chapters: its pages and its contents)."""
+    from lxml import etree
+    try:
+        root = etree.fromstring(data)
+    except etree.XMLSyntaxError:
+        return data
+    found = []
+    for el in root.iter(etree.Element):
+        name = etree.QName(el).localname
+        if name in ("div", "head") or (name == "label" and el.get("type") == "head"):
+            found.append((name, el.get("type"), el.get("n"),
+                          el.get("{http://www.w3.org/XML/1998/namespace}id"),
+                          "" if name == "div" else " ".join("".join(el.itertext()).split())))
+    return found
+
+
+def own_changes(d, edition, rev, files):
+    """Of files changed in the book's folder since rev (repository paths; rev
+    None: uncommitted ones), those that hold this edition back: its own and
+    the shared ones. RELEASE.toml counts for an edition when its part changed;
+    the TEI, the Classic's, for the Modern too when its divisions or headings
+    changed."""
+    bk = fgb.Book(d)
+    which = classifier(d, bk)
+    base = d.relative_to(REPO).as_posix() + "/"
+    tei = bk.tei.relative_to(d).as_posix()
+    kept = []
+    for f in files:
+        rel = f[len(base):] if f.startswith(base) else f
+        if rel == RECORD and rev is not None:
+            hit = record_part(blob(rev, f), edition) != record_part(blob(None, f), edition)
+        elif rel == tei and edition == MODERN:
+            hit = rev is None or tei_outline(blob(rev, f) or b"") != \
+                tei_outline(blob(None, f) or b"")
+        else:
+            hit = which(rel) in (None, edition)
+        if hit:
+            kept.append(f)
+    return kept
 
 
 def made_from(s):
@@ -185,16 +462,23 @@ def made_from(s):
         exists = bool(b and v) and git("rev-parse", "-q", "--verify", f"refs/tags/{tag}",
                                        check=False).returncode == 0
         d = REPO / "books" / b
+        # a volume prints the books' Classic text: their Modern files don't count
         out_.append({"book": b, "version": v, "tag": tag, "exists": exists,
-                     "changed": changed_since(d, tag) if exists and d.is_dir() else []})
+                     "changed": changed_since(d, tag, CLASSIC)
+                     if exists and d.is_dir() else []})
     return out_
 
 
-def state(d):
-    """Where a book stands: its record, its latest sign-off and whether that
-    still holds. A print volume's sign-off also holds only while the books it
-    is made from are as its record names them."""
-    s = {"dir": d, "slug": slug(d), "record": None, "problems": [], "done": False,
+def state(d, edition=CLASSIC):
+    """Where one edition of a book stands: its record, its latest sign-off and
+    whether that still holds. A print volume's sign-off also holds only while
+    the books it is made from are as its record names them."""
+    eds = editions(d)
+    s = {"dir": d, "slug": slug(d), "edition": edition, "unit": unit(d, edition),
+         "name": slug(d) + (" (Modern)" if edition == MODERN else ""),
+         # what to build for this edition: its files only, for a book with two
+         "build": edition if len(eds) > 1 else None,
+         "record": None, "problems": [], "done": False,
          "volume": (d / fgb.VOLUME).exists()}
     rec = d / RECORD
     if rec.exists():
@@ -204,7 +488,7 @@ def state(d):
             s["problems"].append(f"{RECORD}: {e}")
     if s["volume"]:
         s["made_from"] = made_from(s)
-    tags = book_tags(d)
+    tags = book_tags(d, edition)
     s["tags"] = tags
     if not tags:
         return s
@@ -214,7 +498,7 @@ def state(d):
     s["signed"], s["signature"] = signature(tags[0])
     if git("merge-base", "--is-ancestor", t["commit"], "HEAD", check=False).returncode:
         s["problems"].append(f"{tags[0]} is not in this branch's history")
-    s["changed"] = changed_since(d, tags[0])
+    s["changed"] = changed_since(d, tags[0], s["build"])
     if s["volume"]:
         # a book of the volume changed since the version it was made from: the
         # volume as signed off is no longer what its books would make now.
@@ -246,6 +530,8 @@ def gate_record(s, trial=False):
         return [f"no {RECORD} (./fgb release record {s['slug']})"]
     if s.get("volume"):
         return gate_volume_record(s, trial)
+    if s.get("edition") == MODERN:
+        return gate_modern_record(s)
     bad = []
     srcs = rec.get("source", [])
     if not srcs:
@@ -258,6 +544,27 @@ def gate_record(s, trial=False):
             bad.append(f"{x['file']}: checksum differs from {RECORD}")
         if not x.get("description"):
             bad.append(f"{x.get('file')}: no description in {RECORD}")
+    return bad
+
+
+def modern_record(rec):
+    """A RELEASE.toml's [modern] table ({} when it has none)."""
+    m = (rec or {}).get("modern")
+    return m if isinstance(m, dict) else {}
+
+
+def gate_modern_record(s):
+    """The Modern English edition's part of RELEASE.toml, its [modern] table:
+    based_on, the Classic version its text follows, if given, a sign-off of the
+    Classic; a summary of its own only if it should differ from the book's."""
+    m = s["record"].get("modern")
+    if not isinstance(m, dict):
+        return [f"no [modern] table in {RECORD} (./fgb release record {s['slug']} adds one)"]
+    bad = []
+    v = m.get("based_on")
+    if v and git("rev-parse", "-q", "--verify", f"refs/tags/{s['slug']}/{v}",
+                 check=False).returncode:
+        bad.append(f"{RECORD} [modern] based_on: no sign-off {s['slug']}/{v}")
     return bad
 
 
@@ -309,28 +616,34 @@ def gate_verify(d):
     return ["verify.py failed: " + ("; ".join(failed) or (r.stdout + r.stderr)[-300:])]
 
 
-def gate_builds(bk, outdir):
-    """Build the print PDFs, covers and EPUB(s) into outdir. (files, problems)"""
+def gate_builds(bk, outdir, edition=None):
+    """Build the print PDFs, covers and EPUB(s) into outdir, of one edition
+    or (None) both. (files, problems)"""
     problems, files = [], []
     try:
-        files += fgb.build_pdf(bk, outdir, covers=True, problems=problems)
+        files += fgb.build_pdf(bk, outdir, covers=True, problems=problems, edition=edition)
     except SystemExit as e:
         return files, [f"print build failed: {e}"]
     try:
-        files += fgb.build_epub(bk, outdir)
+        files += fgb.build_epub(bk, outdir, edition=edition)
     except SystemExit as e:
         return files, problems + [f"EPUB build failed: {e}"]
     return files, problems
 
 
 def run_gates(s, outdir, log=print, trial=False):
-    """Every gate on one book; (built files, {gate: [problems]}). A print
-    volume's: record, clean and print (it has no TEI or ebook of its own)."""
+    """Every gate on one edition of a book; (built files, {gate: [problems]}).
+    A print volume's: record, clean and print (it has no TEI or ebook of its
+    own). A Modern English edition's: record, clean, print and epub, on its
+    own files and build (verify and report are the TEI's: the Classic's)."""
     d = s["dir"]
+    modern = s.get("edition") == MODERN
     res = {"record": gate_record(s, trial), "clean": []}
-    if not s.get("volume"):
+    if not s.get("volume") and not modern:
         res["report"] = gate_report(d)
     dirty = uncommitted(d)
+    if s.get("build"):
+        dirty = own_changes(d, s["edition"], None, dirty)
     if dirty:
         res["clean"] = [f"uncommitted: {', '.join(dirty[:5])}" +
                         (f" and {len(dirty) - 5} more" if len(dirty) > 5 else "")]
@@ -345,15 +658,17 @@ def run_gates(s, outdir, log=print, trial=False):
         res["_accepted"] = [p for p in problems if p in accepted and " footnote " in p]
         res["print"] = [p for p in problems if p not in res["_accepted"]]
         return files, res
-    log("  verify.py ...")
-    res["verify"] = gate_verify(d)
+    if not modern:
+        log("  verify.py ...")
+        res["verify"] = gate_verify(d)
     log("  building ...")
-    files, built = gate_builds(fgb.Book(d), outdir)
+    files, built = gate_builds(fgb.Book(d), outdir, s.get("build"))
     res["print"] = [p for p in built if "EPUB" not in p]
     # footnotes set a page from their marker (a Typst limitation, not a Lulu
     # rule) that the editor has accepted, each by its message, in RELEASE.toml
     # ("accepted_print"); any other, or a new one, still fails the gate
-    accepted = set((s["record"] or {}).get("accepted_print", []))
+    rec = s["record"] or {}
+    accepted = set((modern_record(rec) if modern else rec).get("accepted_print", []))
     res["_accepted"] = [p for p in res["print"] if p in accepted and " footnote " in p]
     res["print"] = [p for p in res["print"] if p not in res["_accepted"]]
     res["epub"] = [p for p in built if "EPUB" in p]
@@ -375,35 +690,53 @@ def show_gates(res):
 
 def candidates():
     return [d for d in fgb.book_dirs()
-            if (d / RECORD).exists() or book_tags(d)]
+            if (d / RECORD).exists() or book_tags(d) or book_tags(d, MODERN)]
+
+
+def units():
+    """Every release unit: each candidate book's Classic, and its Modern."""
+    return [state(d, ed) for d in candidates() for ed in editions(d)]
 
 
 PUBLISHING = REPO / "books" / "publishing.toml"
 
 
-def ready_of(d):
-    """{"date", "commit"} when the editor has called the book ready to sign."""
+def ready_of(s):
+    """{"date", "commit"} when the editor has called this edition ready to
+    sign (books/publishing.toml, under its unit: <author>/<book>[/modern])."""
     if not PUBLISHING.exists():
         return None
-    r = tomllib.loads(PUBLISHING.read_text(encoding="utf-8")).get(slug(d), {}).get("ready")
+    r = tomllib.loads(PUBLISHING.read_text(encoding="utf-8")).get(s["unit"], {}).get("ready")
     return r if isinstance(r, dict) and r.get("commit") else None
 
 
-def ready_note(d):
-    r = ready_of(d)
+def ready_note(s):
+    r = ready_of(s)
     if not r:
         return ""
-    same = git("diff", "--quiet", r["commit"], "--", str(d.relative_to(REPO)),
-               check=False).returncode == 0
+    same = not changed_since(s["dir"], r["commit"], s["build"])
     return (f"; ready to sign since {r['date']} ({r['commit']})" if same else
             f"; called ready {r['date']} ({r['commit']}), but changed since")
+
+
+def edition_of(a, d):
+    """The edition a command names: --modern, for a book that has one."""
+    if not getattr(a, "modern", False):
+        return CLASSIC
+    if MODERN not in editions(d):
+        sys.exit(f"{slug(d)} has no Modern English edition (EPUB[\"modern\"] in editorial.py)")
+    return MODERN
 
 
 def cmd_ready(a):
     """Record (or with --clear take back) the editor's "ready to sign"."""
     d = fgb.find_book(a.book)
-    key = slug(d)
-    if not a.clear and git("status", "--porcelain", "--", str(d.relative_to(REPO))).stdout.strip():
+    s = state(d, edition_of(a, d))
+    key = s["unit"]
+    dirty = uncommitted(d)
+    if s["build"]:
+        dirty = own_changes(d, s["edition"], None, dirty)
+    if not a.clear and dirty:
         sys.exit(f"{key}: uncommitted changes in its folder; commit them first, so "
                  "\"ready\" names the book as it stands")
     head = f'["{key}"]'
@@ -439,8 +772,7 @@ def cmd_status(a):
               "(./fgb release record BOOK to start one)")
         return 0
     gh = os.environ.get("GITHUB_ACTIONS") == "true"
-    for d in books:
-        s = state(d)
+    for s in (state(d, ed) for d in books for ed in editions(d)):
         t = s.get("tag")
         if s["done"]:
             what = f"done      {t['version']}, signed off {t['date']} by {t['signer']}"
@@ -454,8 +786,8 @@ def cmd_status(a):
         else:
             what = "not signed off"
         if not s["done"]:
-            what += ready_note(d)
-        print(f"  {s['slug']:58} {what}")
+            what += ready_note(s)
+        print(f"  {s['name']:58} {what}")
         for m in s.get("made_from", []):
             print(f"      made from {m['book']} {m['version'] or '?'}" +
                   (f": {len(m['changed'])} file(s) changed since" if m["changed"] else
@@ -463,7 +795,7 @@ def cmd_status(a):
         for f in s.get("changed", [])[:8]:
             print(f"      changed: {f}")
         if gh and t and s.get("changed"):
-            print(f"::warning::{s['slug']} changed since its sign-off "
+            print(f"::warning::{s['name']} changed since its sign-off "
                   f"({t['tag']}); the next release carries its signed version until it "
                   "is signed off again")
         bad = gate_record(s)
@@ -520,12 +852,40 @@ def record_volume(d):
           ("" if before else ": fill in the summary, then commit it"))
 
 
+def modern_table(d):
+    """The [modern] table a record starts with: the Modern English edition's
+    part of RELEASE.toml (gate_modern_record)."""
+    tags = book_tags(d)
+    v = tags[0].rsplit("/", 1)[-1] if tags else ""
+    return [
+        "# The Modern English edition: a paperback and ebook of its own, signed off",
+        f"# on its own ({unit(d, MODERN)}/vN: ./fgb release sign BOOK --modern), with",
+        "# its own Lulu revisions. A change to this table holds back only it.",
+        "[modern]",
+        "# The catalog uses the book's summary above; give the Modern its own only if needed:",
+        '# summary = ""',
+        "# The Classic version whose text it follows.",
+        f"based_on = {json.dumps(v)}",
+        "# Stray footnotes in its print PDF the editor accepts, each by its message:",
+        "# accepted_print = []",
+        ""]
+
+
 def cmd_record(a):
     d = fgb.find_book(a.book, volumes_too=True)
     if (d / fgb.VOLUME).exists():
         return record_volume(d)
     path = d / RECORD
+    modern = MODERN in editions(d)
     if path.exists():
+        text = path.read_text(encoding="utf-8")
+        if modern and "modern" not in tomllib.loads(text):
+            # a table goes at the end, after every other one
+            path.write_text(text.rstrip("\n") + "\n\n" + "\n".join(modern_table(d)),
+                            encoding="utf-8")
+            print(f"{path.relative_to(REPO)}: added a [modern] table for the Modern English "
+                  "edition; check based_on, then commit it")
+            return
         sys.exit(f"{path.relative_to(REPO)} exists; edit it by hand (a source's "
                  "checksum should never change: the sources are kept untouched)")
     bk = fgb.Book(d)
@@ -555,6 +915,8 @@ def cmd_record(a):
                   f"sha256 = {q(sha256(f))}", ""]
     lines += ["# Copies the edition was checked against, kept or not (one per witness):",
               "# [[witness]]", '# description = ""', '# url = ""', ""]
+    if modern:
+        lines += modern_table(d)
     path.write_text("\n".join(lines), encoding="utf-8")
     print(f"wrote {path.relative_to(REPO)}: fill in the descriptions and the "
           "summary, then commit it")
@@ -564,7 +926,8 @@ REVISIONS = REPO / "books" / "revisions.json"
 
 
 def revisions():
-    """books/revisions.json: every release and the book versions in it
+    """books/revisions.json: every release and the book versions in it, by
+    unit: <author>/<book> for the Classic, <author>/<book>/modern for the Modern
     ({"releases": [{"release": "2026.03.16", "books": {"<author>/<book>": 2}}]})."""
     if REVISIONS.exists():
         return json.loads(REVISIONS.read_text(encoding="utf-8"))
@@ -575,7 +938,7 @@ def record_release(rid, done):
     """Add (or replace) this release in books/revisions.json; its text."""
     data = revisions()
     # a whole version as a number (Lulu's revision), a point version as "13.1"
-    books = {s["slug"]: (lambda v: v[0] if len(v) == 1 else ".".join(map(str, v)))(
+    books = {s["unit"]: (lambda v: v[0] if len(v) == 1 else ".".join(map(str, v)))(
         version_key(s["tag"]["tag"])) for s in done}
     data["releases"] = [r for r in data["releases"] if r["release"] != rid] + \
         [{"release": rid, "books": books}]
@@ -584,13 +947,15 @@ def record_release(rid, done):
     return text
 
 
-def last_version(d):
-    """The last version of the book: the higher of its newest tag and the
-    highest in books/revisions.json (the Lulu revisions published before
-    sign-off tags, which a tag from a withdrawn release can lag behind)."""
-    tags = book_tags(d)
+def last_version(d, edition=CLASSIC):
+    """The last version of one edition of the book: the higher of its newest
+    tag and the highest in books/revisions.json under its own id (the Lulu
+    revisions published before sign-off tags, which a tag from a withdrawn
+    release can lag behind). Each edition counts its own: the Modern is a
+    Lulu book of its own."""
+    tags = book_tags(d, edition)
     tagged = version_key(tags[0])[0] if tags else 0
-    return max([tagged] + [int(str(r["books"].get(slug(d), 0)).split(".")[0])
+    return max([tagged] + [int(str(r["books"].get(unit(d, edition), 0)).split(".")[0])
                            for r in revisions()["releases"]])
 
 
@@ -604,25 +969,27 @@ def print_version(version):
     return "v" + version.lstrip("v").split(".")[0]
 
 
-def next_point(d):
-    """The next point version: vN.(M+1) after the newest sign-off vN(.M)."""
-    tags = book_tags(d)
+def next_point(d, edition=CLASSIC):
+    """The next point version of an edition: vN.(M+1) after its newest
+    sign-off vN(.M)."""
+    tags = book_tags(d, edition)
+    name = unit(d, edition)
     if not tags:
-        sys.exit(f"{slug(d)} has no sign-off: a point version follows one")
+        sys.exit(f"{name} has no sign-off: a point version follows one")
     n = version_key(tags[0])
-    if n[0] < last_version(d):
-        sys.exit(f"{slug(d)}: revision {last_version(d)} (books/revisions.json) is "
+    if n[0] < last_version(d, edition):
+        sys.exit(f"{name}: revision {last_version(d, edition)} (books/revisions.json) is "
                  f"newer than its last sign-off, {tags[0]}; sign off a print revision")
     return f"{n[0]}.{(n[1] if len(n) > 1 else 0) + 1}"
 
 
-def build_at(tag, outdir, epub=False, then=None):
+def build_at(tag, outdir, epub=False, then=None, edition=None):
     """Build the book as it was at a sign-off (a checkout of the tag, with
     this colophon; the templates it imports from the cache): its print PDFs
-    and covers, and with epub its EPUB(s). then(bk, files) runs before the
-    checkout goes (the web pages, the catalog entry); its result is returned
-    with the files."""
-    book = Path("books") / tag.rsplit("/v", 1)[0]
+    and covers, and with epub its EPUB(s); of one edition, or (None) all.
+    then(bk, files) runs before the checkout goes (the web pages, the catalog
+    entry); its result is returned with the files."""
+    book = Path("books") / tag_book(tag)
     outdir.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="fgb-signed-") as tmp:
         wt = Path(tmp) / "repo"
@@ -633,17 +1000,18 @@ def build_at(tag, outdir, epub=False, then=None):
             for m in sorted(set(typ.split())):
                 packages.ensure(*m[len("@local/"):].split(":"))
             bk = fgb.Book(wt / book)
-            files = fgb.build_pdf(bk, outdir, covers=True, root=wt)
+            files = fgb.build_pdf(bk, outdir, covers=True, root=wt, edition=edition)
             if epub and not bk.volume:
-                files += fgb.build_epub(bk, outdir, root=wt)
+                files += fgb.build_epub(bk, outdir, root=wt, edition=edition)
             return files, (then(bk, files) if then else None)
         finally:
             git("worktree", "remove", "--force", str(wt), check=False)
 
 
-def print_at(tag, outdir):
-    """The book's print PDFs and covers as they were at a sign-off."""
-    return build_at(tag, outdir)[0]
+def print_at(tag, outdir, edition=None):
+    """The book's print PDFs and covers as they were at a sign-off (of one
+    edition, or None: all)."""
+    return build_at(tag, outdir, edition=edition)[0]
 
 
 def page_images(pdf, outdir):
@@ -677,23 +1045,25 @@ def print_differences(old, new, tmp):
 
 def cmd_sign(a):
     d = fgb.find_book(a.book, volumes_too=True)
-    s = state(d)
+    edition = edition_of(a, d)
+    s = state(d, edition)
     if a.point and a.version:
         sys.exit("give a version or --point, not both")
     if s["volume"] and (a.point or is_point(a.version or "")):
         sys.exit(f"{slug(d)} is a print volume: no point versions (it has no ebook)")
-    n = next_point(d) if a.point else a.version or str(last_version(d) + 1)
+    # each edition counts its own versions (the Modern is a Lulu book of its own)
+    n = next_point(d, edition) if a.point else a.version or str(last_version(d, edition) + 1)
     point = is_point(n)
     if point and n.lstrip("v").split(".")[0] != str(version_key(s["tag"]["tag"])[0]
                                                    if s.get("tag") else ""):
         sys.exit(f"a point version follows the last sign-off "
                  f"({s['tag']['tag'] if s.get('tag') else 'none'}): {n} does not")
-    tag = f"{slug(d)}/v{n.lstrip('v')}"
+    tag = f"{s['unit']}/v{n.lstrip('v')}"
     if git("rev-parse", "-q", "--verify", f"refs/tags/{tag}", check=False).returncode == 0:
         sys.exit(f"{tag} exists already")
     if s.get("tag") and not s["changed"]:
-        sys.exit(f"{slug(d)} is unchanged since {s['tag']['tag']}: nothing new to sign off")
-    print(f"{slug(d)}: the gates before signing off {tag}")
+        sys.exit(f"{s['name']} is unchanged since {s['tag']['tag']}: nothing new to sign off")
+    print(f"{s['name']}: the gates before signing off {tag}")
     with tempfile.TemporaryDirectory(prefix="fgb-release-") as tmp:
         (Path(tmp) / "now").mkdir()
         files, res = run_gates(s, Path(tmp) / "now")
@@ -704,7 +1074,8 @@ def cmd_sign(a):
         if point:
             last = s["tag"]["tag"]
             print(f"  the print at {last} ...")
-            then = print_at(last, Path(tmp) / "then")
+            # the edition's own last print: the other edition's is another book
+            then = print_at(last, Path(tmp) / "then", s["build"])
             diff = print_differences(then, files, Path(tmp) / "pages")
             was = print_version(s["tag"]["version"])
             lulu = [f"Print: the same as {last.rsplit('/', 1)[-1]}, page for page "
@@ -712,11 +1083,14 @@ def cmd_sign(a):
                     f"Print: changed since {last.rsplit('/', 1)[-1]} "
                     f"({'; '.join(diff)}); not a Lulu revision."]
             print(f"  {lulu[0]}")
-    title = fgb.Book(d).title
+    title = edition_title(fgb.Book(d), edition)
     # a print volume's tag says what it was made from, as its record does
     parts = ["Made from: " + "; ".join(
         f"{fgb.Book(REPO / 'books' / m['book']).title} {m['version']} ({m['tag']})"
         for m in s["made_from"]) + "."] if s["volume"] else []
+    based = modern_record(s["record"]).get("based_on") if edition == MODERN else ""
+    if based:
+        parts.append(f"Based on: the Classic {based} ({slug(d)}/{based}).")
     msg = [f"{title}, v{n.lstrip('v')}"] + parts + lulu + ([a.note] if a.note else [])
     args = ["tag", "-s", tag] + [x for m in msg for x in ("-m", m)]
     r = subprocess.run(["git", "-C", str(REPO), *args])   # may ask for the key
@@ -727,8 +1101,9 @@ def cmd_sign(a):
     print(f"publish the sign-off: git push origin {tag}")
 
 
-def template_version(bk):
-    for f in bk.cfg.get("PRINT") or [bk.dir.name + ".typ"]:
+def template_version(bk, edition=None):
+    for f in [f for f in bk.cfg.get("PRINT") or [bk.dir.name + ".typ"]
+              if fgb.in_edition(f, edition)]:
         m = re.search(r'#import "@local/(fgbooks\w*):([\d.]+)"',
                       (bk.dir / f).read_text(encoding="utf-8"))
         if m:
@@ -785,7 +1160,10 @@ def stable_commit(rid, done, catalog_md, catalog_json, branch=BRANCH, extra=(),
     """A commit on the local `stable` branch: HEAD's tree with only the done
     books (every other books/<author>/<book>/ folder left out), the carried
     ones as they were at their sign-off, and the catalog. Its parent is the
-    last stable commit, so `git pull` works."""
+    last stable commit, so `git pull` works. done and carried are units: a
+    folder is HEAD's when one of its editions is done, else as tagged at its
+    first carried sign-off; another edition carried beside it has its own
+    files as at its own tag (the shared files are the folder's)."""
     keep = {slug(s["dir"]) for s in list(done) + list(carried)}
     env = dict(os.environ, GIT_INDEX_FILE=str(Path(tempfile.mkdtemp()) / "index"))
     g = lambda *a, inp=None: subprocess.run(["git", "-C", str(REPO), *a], env=env,
@@ -799,8 +1177,13 @@ def stable_commit(rid, done, catalog_md, catalog_json, branch=BRANCH, extra=(),
             drop.add("/".join(parts[:3]))
     for p in sorted(drop):
         g("rm", "-r", "--cached", "-q", p)
+    based = {s["slug"] for s in done}
     for s in carried:
         folder = f"books/{s['slug']}"
+        if s["slug"] in based:
+            overlay(g, s)
+            continue
+        based.add(s["slug"])
         g("rm", "-r", "--cached", "-q", "--ignore-unmatch", folder)
         g("read-tree", f"--prefix={folder}/", f"{s['tag']['tag']}:{folder}")
     files = [("CATALOG.md", catalog_md), ("catalog.json", catalog_json), *extra]
@@ -816,13 +1199,28 @@ def stable_commit(rid, done, catalog_md, catalog_json, branch=BRANCH, extra=(),
     if parent and out("rev-parse", f"{parent}^{{tree}}") == tree:
         return out("rev-parse", parent), False
     msg = f"Release {rid}\n\n" + "".join(
-        f"{s['slug']} {s['tag']['version']} ({s['tag']['tag']})\n" for s in done) + "".join(
-        f"{s['slug']} {s['tag']['version']} ({s['tag']['tag']}, carried)\n"
+        f"{s['unit']} {s['tag']['version']} ({s['tag']['tag']})\n" for s in done) + "".join(
+        f"{s['unit']} {s['tag']['version']} ({s['tag']['tag']}, carried)\n"
         for s in carried) + \
         f"\nfrom {out('rev-parse', 'HEAD')} on {out('rev-parse', '--abbrev-ref', 'HEAD')}\n"
     commit = g("commit-tree", tree, *(["-p", parent] if parent else []), inp=msg)
     git("update-ref", f"refs/heads/{branch}", commit)
     return commit, True
+
+
+def overlay(g, s):
+    """In the index g works on, one edition's own files of its folder (not the
+    shared ones) as they were at its sign-off."""
+    which = classifier(s["dir"])
+    folder = f"books/{s['slug']}/"
+    for path in g("ls-files", folder).splitlines():
+        if which(path[len(folder):]) == s["edition"]:
+            g("rm", "--cached", "-q", path)
+    for line in out("ls-tree", "-r", s["tag"]["tag"], "--", folder).splitlines():
+        meta, path = line.split("\t", 1)
+        mode, _kind, obj = meta.split()
+        if which(path[len(folder):]) == s["edition"]:
+            g("update-index", "--add", "--cacheinfo", f"{mode},{obj},{path}")
 
 
 def catalog(rid, entries, colophon, trial=False):
@@ -834,8 +1232,11 @@ def catalog(rid, entries, colophon, trial=False):
           "Get it: `git clone --recursive -b stable "
           "https://github.com/freely-given-books/books.git`, then `./fgb build`.", "",
           "Every book here has been signed off by the editor: a signed tag",
-          "`<author>/<book>/vN` on the commit it was checked at, and the book's",
-          "folder is exactly as it was signed off. Each book was checked again for",
+          "`<author>/<book>/vN` on the commit it was checked at (a Modern English",
+          "edition, its own paperback with its own Lulu revisions, has its own:",
+          "`<author>/<book>/modern/vN`), and the book's files are as they were",
+          "signed off (a book's two editions are signed off one by one; each tag",
+          "covers its edition's own files and the shared ones). Each book was checked again for",
           "this release: its sources match the checksums in its `RELEASE.toml`, the",
           "TEI rebuilds as committed (verify.py), every review edit is applied, the",
           "print PDFs keep Lulu's rules and the EPUBs pass epubcheck. A book changed",
@@ -844,14 +1245,16 @@ def catalog(rid, entries, colophon, trial=False):
           "Check a sign-off yourself:", "",
           "```sh",
           "git -c gpg.ssh.allowedSignersFile=allowed_signers tag -v <author>/<book>/vN",
-          "git diff --stat <author>/<book>/vN stable -- books/<author>/<book>   # nothing",
+          "git diff --stat <author>/<book>/vN stable -- books/<author>/<book>   # that edition's: nothing",
           "sha256sum -c SHA256SUMS                                         # the downloads",
           "```", "",
           f"Built with colophon {colophon}.", "",
-          "| Book | Author | Version | Signed off |", "| --- | --- | --- | --- |"]
+          "| Book | Author | Edition | Version | Signed off |",
+          "| --- | --- | --- | --- | --- |"]
     for e in entries:
         shown = e["version"] + (" (between Lulu revisions)" if is_point(e["version"]) else "")
-        md.append(f"| [{e['title']}](#{re.sub(r'[^a-z0-9 -]', '', e['title'].lower()).replace(' ', '-')}) | {e['author']} | {shown} "
+        ed = "Modern English" if e.get("edition") == MODERN else "Classic"
+        md.append(f"| [{e['title']}](#{re.sub(r'[^a-z0-9 -]', '', e['title'].lower()).replace(' ', '-')}) | {e['author']} | {ed} | {shown} "
                   f"| {e['signed_off']['date']} |")
     for e in entries:
         md += ["", f"## {e['title']}"]
@@ -861,7 +1264,12 @@ def catalog(rid, entries, colophon, trial=False):
                f"- version {e['version']}: tag `{e['signed_off']['tag']}`, "
                f"signed off {e['signed_off']['date']} by {e['signed_off']['signer']}"
                + ("" if e["signed_off"]["signature_verified"] else " (signature not verified)"),
-               f"- template: {e['template']}" if e["template"] else "- template: -"]
+               f"- template: {e['template']}" if e["template"] else "- template: -",
+               f"- print: Lulu revision {e['lulu_revision']} of "
+               + ("the Modern English paperback, a Lulu book of its own"
+                  if e.get("edition") == MODERN else "this paperback")]
+        if e.get("based_on"):
+            md.append(f"- its text follows the Classic {e['based_on']}")
         if e.get("carried"):
             md.append("- changed since this sign-off and not signed off again: this "
                       "release carries the signed version, built from its tag")
@@ -892,27 +1300,35 @@ def catalog(rid, entries, colophon, trial=False):
 
 
 def entry(s, bk, files, carried=False):
-    """A book's entry in the catalog."""
+    """One edition's entry in the catalog: a book's Classic, or its Modern
+    English (the same "book", its own "unit", version, sign-off and files)."""
     rec = s["record"] or {}
     if carried:
         # its record as signed off
         r = bk.dir / RECORD
         rec = tomllib.loads(r.read_text(encoding="utf-8")) if r.exists() else rec
+    modern = s.get("edition") == MODERN
+    part = modern_record(rec) if modern else rec
     t = s["tag"]
     made = [{"book": x["book"], "version": x["version"],
              "tag": f"{x['book']}/{x['version']}"} for x in rec.get("book", [])]
     return {
-        "book": s["slug"], "folder": s["dir"].name,
-        "title": bk.title, "author": bk.author,
-        "version": t["version"], "summary": rec.get("summary", ""),
+        "book": s["slug"], "unit": s["unit"], "edition": s.get("edition", CLASSIC),
+        "folder": s["dir"].name,
+        "title": edition_title(bk, s.get("edition")), "author": bk.author,
+        "version": t["version"], "lulu_revision": version_key(t["tag"])[0],
+        "summary": part.get("summary") or rec.get("summary", ""),
+        **({"based_on": part.get("based_on", "")} if modern else {}),
         "signed_off": {"tag": t["tag"], "commit": t["commit"], "date": t["date"],
                        "signer": t["signer"], "note": t["note"],
                        "signature_verified": s["signed"]},
         "carried": carried,
-        "template": template_version(bk),
-        "sources": rec.get("source", []), "witnesses": rec.get("witness", []),
+        "template": template_version(bk, s.get("build")),
+        # the Modern is made from the Classic's text: the sources are the Classic's
+        "sources": [] if modern else rec.get("source", []),
+        "witnesses": [] if modern else rec.get("witness", []),
         **({"made_from": made} if bk.volume else {}),
-        "coverage": None if bk.volume else coverage.coverage(bk.tei),
+        "coverage": None if bk.volume or modern else coverage.coverage(bk.tei),
         "files": files}
 
 
@@ -927,7 +1343,9 @@ def cmd_make(a):
     branch = BRANCH + ("-trial" if a.trial else "")
     rid = release_id()
     root = (Path(a.out).resolve() if a.out else REPO / "dist" / "release") / rid
-    states = [state(d) for d in candidates()]
+    # one state per edition: a book's Classic and its Modern go out (or are
+    # held back, or carried) each on its own
+    states = units()
     signed = [s for s in states if s.get("tag")]
     done = [s for s in signed if s["done"] or (a.trial and s["holds"])]
     # a book changed since its sign-off goes out as it was signed off: built
@@ -936,12 +1354,12 @@ def cmd_make(a):
                not s["problems"] and (s["signed"] or a.trial)]
     for s in signed:
         if s in carried:
-            print(f"carried: {s['slug']} at {s['tag']['tag']} "
+            print(f"carried: {s['name']} at {s['tag']['tag']} "
                   f"({len(s['changed'])} file(s) changed since; not signed off again)")
         elif s not in done:
             why = (f"{len(s['changed'])} file(s) changed since {s['tag']['tag']}"
                    if s["changed"] else "; ".join(s["problems"]) or s["signature"])
-            print(f"held back: {s['slug']} ({why})")
+            print(f"held back: {s['name']} ({why})")
     if not done and not carried:
         sys.exit("no book is signed off: nothing to release")
     if root.exists():
@@ -950,12 +1368,12 @@ def cmd_make(a):
     entries, failed = [], []
     for s in done:
         d = s["dir"]
-        print(f"\n== {s['slug']} {s['tag']['version']}")
+        print(f"\n== {s['name']} {s['tag']['version']}")
         with tempfile.TemporaryDirectory(prefix="fgb-release-") as tmp:
             built, res = run_gates(s, Path(tmp), trial=a.trial)
             show_gates(res)
             if any(v for k, v in res.items() if not k.startswith("_")):
-                failed.append(s["slug"])
+                failed.append(s["name"])
                 continue
             # a point version's print is revision N's: the PDFs and covers
             # built at the vN tag, named vN; its EPUBs carry vN.M
@@ -964,7 +1382,8 @@ def cmd_make(a):
             if is_point(version):
                 printed = print_version(version)
                 print(f"  the print at {printed} ...")
-                print_files = print_at(f"{s['slug']}/{printed}", Path(tmp) / "print")
+                print_files = print_at(f"{s['unit']}/{printed}", Path(tmp) / "print",
+                                       s["build"])
                 built = [f for f in built if f.suffix == ".epub"] + print_files
             name = lambda f: asset_name(d, version if Path(f).suffix in (".epub", ".html")
                                         else printed, Path(f))
@@ -979,7 +1398,7 @@ def cmd_make(a):
                               "sha256": sha256(dest)})
         entries.append(entry(s, fgb.Book(d), files))
     for s in carried:
-        print(f"\n== {s['slug']} {s['tag']['version']} (carried, from its tag)")
+        print(f"\n== {s['name']} {s['tag']['version']} (carried, from its tag)")
         version = printed = s["tag"]["version"]
         if is_point(version):
             printed = print_version(version)
@@ -990,7 +1409,7 @@ def cmd_make(a):
                        printed=printed):
                 if is_point(version):
                     built = [f for f in built if f.suffix == ".epub"] + \
-                        print_at(f"{s['slug']}/{printed}", Path(tmp) / "print")
+                        print_at(f"{s['unit']}/{printed}", Path(tmp) / "print", s["build"])
                 built += fgb.build_web(bk, Path(tmp), built, link=name)
                 files = []
                 for f in built:
@@ -1001,15 +1420,17 @@ def cmd_make(a):
                 return entry(s, bk, files, carried=True)
             try:
                 _, e = build_at(s["tag"]["tag"], Path(tmp) / "book", epub=True,
-                                then=finish)
+                                then=finish, edition=s["build"])
             except SystemExit as err:
                 print(f"  failed to build from its tag: {err}")
-                failed.append(s["slug"])
+                failed.append(s["name"])
                 continue
         entries.append(e)
     if failed:
         sys.exit(f"\nno release: {', '.join(failed)} failed a gate (above). A signed-off "
                  "book that no longer passes needs fixing and a new sign-off.")
+    # a book's Classic and Modern side by side, the Classic first
+    entries.sort(key=lambda e: (e["book"], e.get("edition") == MODERN))
     md, js = catalog(rid, entries, colophon, a.trial)
     (root / "CATALOG.md").write_text(md, encoding="utf-8")
     (root / "catalog.json").write_text(js, encoding="utf-8")
@@ -1024,7 +1445,7 @@ def cmd_make(a):
     print(f"\nrelease {rid}: {len(done) + len(carried)} book(s) in {rel}"
           + (f", {len(carried)} carried at their sign-off" if carried else ""))
     for e in entries:
-        print(f"  {e['book']} {e['version']}: {len(e['files'])} file(s)")
+        print(f"  {e['unit']} {e['version']}: {len(e['files'])} file(s)")
     print(f"`{branch}`: {'new commit' if new else 'unchanged at'} {commit[:12]}")
     if a.trial:
         print("a trial: nothing to publish (git branch -D stable-trial when done with it)")

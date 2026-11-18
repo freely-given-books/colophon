@@ -57,8 +57,11 @@ the owner the plan (which books change, which are new) before writing.
 
 ## What is here
 
-- `site.json`: one entry per book: `book` (`<author>/<book>`), `slug` (the
-  site's book slug), `title`, `author`, `version`, `summary`, `year` (first
+- `site.json`: one entry per book edition: `book` (`<author>/<book>`), `unit`
+  and `edition` (a Modern English edition is an entry of its own, `unit`
+  `<author>/<book>/modern`, `edition` `modern`: its own paperback, version,
+  Lulu link and files, all named `-modern`), `slug` (the site's book slug;
+  `<book>-modern` for a Modern English edition unless publishing.toml says), `title`, `author`, `version`, `summary`, `year` (first
   published), `description` (a sentence or two for readers), `tags`, `pages` (each
   print PDF's page count), `lulu` (the paperback's Lulu page; a list, one per
   volume, for a book in volumes; `""` = none yet), `note` (anything particular
@@ -215,7 +218,7 @@ def kind(name):
         return "epub"
     if re.search(r"-front\.(png|jpe?g)$", name):
         return "front"
-    if re.search(r"-cover(-vol-\d+)?\.pdf$", name):
+    if re.search(r"-cover(-vol-\d+)?(-modern)?\.pdf$", name):
         return "cover"
     if name.endswith(".pdf"):
         return "pdf"
@@ -236,7 +239,14 @@ def site_manifest(rel):
     pub = tomllib.loads(PUBLISHING.read_text(encoding="utf-8")) if PUBLISHING.exists() else {}
     books, print_volumes = [], []
     for b in cat["books"]:
-        p = pub.get(b["book"], {})
+        # a Modern English edition is an entry of its own (its own version, Lulu
+        # link and files): books/publishing.toml's ["<author>/<book>/modern"]
+        p = pub.get(b.get("unit", b["book"]), {})
+        modern = b.get("edition") == "modern"
+        if modern:
+            # the book's year, description and tags, unless its own table says
+            p = {**{k: v for k, v in pub.get(b["book"], {}).items()
+                    if k in ("year", "description", "tags")}, **p}
         if not any(kind(f["name"]) == "epub" for f in b["files"]):
             # a print volume: its books are editions of their own, with their ebooks
             volume = REPO / "books" / b["book"] / "volume.toml"
@@ -246,7 +256,7 @@ def site_manifest(rel):
                                   "version": b["version"], "books": members,
                                   "lulu": p.get("lulu", ""), "note": p.get("note", "")})
             continue
-        slug = p.get("slug", b["folder"])
+        slug = p.get("slug", b["folder"] + ("-modern" if modern else ""))
         vols = {}
         for f in dict.fromkeys(f["name"] for f in b["files"]):
             k = kind(f)
@@ -265,7 +275,9 @@ def site_manifest(rel):
                 "lulu": lulu,
                 "pages": page_count(rel / files["pdf"]) if "pdf" in files else None,
                 "files": files})
-        books.append({"book": b["book"], "title": b["title"], "author": b["author"],
+        books.append({"book": b["book"], "unit": b.get("unit", b["book"]),
+                      "edition": b.get("edition", "classic"),
+                      "title": b["title"], "author": b["author"],
                       "version": b["version"], "summary": b["summary"],
                       "year": p.get("year"), "description": p.get("description", ""),
                       "tags": p.get("tags", ["classic"]),
@@ -283,7 +295,7 @@ def export(rel, out, lulu_dir=None):
     pub = tomllib.loads(PUBLISHING.read_text(encoding="utf-8")) if PUBLISHING.exists() else {}
     site = []
     for b in cat["books"]:
-        d = out / b["book"]
+        d = out / b.get("unit", b["book"])
         d.mkdir(parents=True, exist_ok=True)
         keep = [f["name"] for f in b["files"]
                 if f["name"].endswith((".pdf", ".epub", "-front.png"))]
@@ -301,16 +313,19 @@ def export(rel, out, lulu_dir=None):
                     zf.write(rel / i, i)
                     zf.write(rel / c[0], c[0])
                 zips.append(z.name)
-        p = pub.get(b["book"], {})
+        p = pub.get(b.get("unit", b["book"]), {})
         if not covers:
             zips += own_covers(b, d, lulu_dir, p.get("lulu", ""))
-        site.append({"book": b["book"], "slug": p.get("slug", b["folder"]),
+        site.append({"book": b["book"], "unit": b.get("unit", b["book"]),
+                     "edition": b.get("edition", "classic"),
+                     "slug": p.get("slug", b["folder"] + ("-modern" if b.get("edition") == "modern"
+                                                         else "")),
                      "title": b["title"], "author": b["author"],
                      "version": b["version"], "summary": b["summary"],
                      "pages": {n: page_count(rel / n) for n in interiors},
                      "lulu": p.get("lulu", ""), "note": p.get("note", ""),
                      "files": sorted(keep + zips)})
-        print(f"  {b['book']} {b['version']}: {len(keep) + len(zips)} file(s)")
+        print(f"  {b.get('unit', b['book'])} {b['version']}: {len(keep) + len(zips)} file(s)")
     shutil.copy2(rel / "catalog.json", out / "catalog.json")
     (out / "site.json").write_text(json.dumps(site, indent=2, ensure_ascii=False) + "\n",
                                    encoding="utf-8")
@@ -318,7 +333,7 @@ def export(rel, out, lulu_dir=None):
     editor = cfg.get("editor_short") or cfg.get("editor") or "the editor"
     (out / "IMPORT.md").write_text(IMPORT.format(release=cat["release"], editor=editor),
                                    encoding="utf-8")
-    missing = [s["book"] for s in site
+    missing = [s["unit"] for s in site
                if not s["lulu"] or (isinstance(s["lulu"], list) and not all(s["lulu"]))]
     if missing:
         print(f"no Lulu link (books/publishing.toml): {', '.join(missing)}")
