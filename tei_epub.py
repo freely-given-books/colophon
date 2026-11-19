@@ -26,8 +26,8 @@ Options:
                      from DIR/<its layout file>.typ (chapters/modern), rendered
                      with Typst's HTML export, in place of the TEI's (headings
                      at the levels the TEI's pages give them; outline levels,
-                     OUTLINE_MARKS, set-off blocks, epigraphs and signatures
-                     in the Classic's markup: edition_blocks)
+                     OUTLINE_MARKS, set-off blocks, epigraphs, signatures,
+                     speeches and stanzas in the Classic's markup: edition_blocks)
   --typst-root DIR   Typst --root for .typ pages (default: the folder above
                      the TEI's source/ folder, i.e. the book folder)
   --cover FILE       cover image; gets a cover page and cover-image property
@@ -206,6 +206,15 @@ LAYOUT_SHOW = (
     '    "data-set": repr(kids.any(c => c.func() == fgb-styled)), "data-breakable": repr(it.breakable)),\n'
     '    it.body)\n'
     '} else { it }\n'
+    # the template's #speech (a hung paragraph) and #stanza (a paragraph not justified): marked
+    # so the Modern ebook sets them as the Classic's p.speech and p.verse (every paragraph has
+    # every field, so paragraphs are justified here and only #stanza's says otherwise)
+    '#set par(justify: true)\n'
+    '#show par: it => if it.hanging-indent != 0pt {\n'
+    '  html.elem("div", attrs: (class: "fgb-speech"), it.body)\n'
+    '} else if not it.justify {\n'
+    '  html.elem("div", attrs: (class: "fgb-verse"), it.body)\n'
+    '} else { it }\n'
     '#show enum: it => if it.indent != 0pt {\n'
     '  html.elem("div", attrs: (class: "fgb-enum", "data-indent": repr(it.indent)), it)\n'
     '} else { it }\n')
@@ -258,11 +267,18 @@ def edition_blocks(body, counts=None, subtitle=False):
     #align(center) p.center (under the page's title p.subtitle, when the Classic's
     page has one: subtitle), a bold block in it
     p.subtitle.strong, an unbreakable block in it (a verse and its reference) div.epigraph; #align(right) p.signature (the first of a run signature-first);
+    #speech p.speech (SPEECH_BLOCKS); #stanza p.verse;
     small capitals span.smallcaps."""
     for sp in body.iter("span"):
         if (sp.get("style") or "").replace(" ", "") == "font-variant-caps:small-caps":
             del sp.attrib["style"]
             sp.set("class", "smallcaps")
+    # a speech or stanza mark inside another block (a summary's #set par(justify: false)) is
+    # a plain paragraph of that block
+    for el in list(body.iter("div")):
+        if el.get("class") in ("fgb-speech", "fgb-verse") and el.getparent() is not body:
+            el.tag = "p"
+            del el.attrib["class"]
     for el in list(body):
         cls = el.get("class") if el.tag == "div" else None
         if el.tag == "p" and counts is not None:
@@ -307,6 +323,9 @@ def edition_blocks(body, counts=None, subtitle=False):
                 c = "subtitle" if subtitle and prev is not None and prev.getprevious() is None and \
                     re.fullmatch(r"h[1-6]", prev.tag) else "center"
                 _replace(el, "".join(f'<p class="{c}">{t.strip()}</p>' for t in _paras(el)))
+        elif cls in ("fgb-speech", "fgb-verse"):
+            # a speech in dialogue (hung) or a stanza of verse, as tei_to_html sets them
+            _replace(el, f'<p class="{cls[4:]}">{_inner(el).strip()}</p>')
         elif cls == "fgb-block" and el.get("data-inset") == "true":
             c = "inset summary" if el.get("data-set") == "true" else "inset"
             _replace(el, "".join(f'<p class="{c}">{t.strip()}</p>' for t in _paras(el)))
