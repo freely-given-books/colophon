@@ -240,8 +240,9 @@ shows a second line `<author>/<book> (Modern)`; `make` gives each edition its ow
 entry (`unit`, `edition`, `lulu_revision`; the Modern's files are its PDF, cover, EPUB and
 reader page, the comparison page is the Classic's) and ships a Classic alone while its Modern
 is not signed off. In `stable` a folder is HEAD's when one edition is done, an edition
-carried beside it has its own files as at its tag (the shared files stay HEAD's). Print
-volumes print the Classic text: a Modern change never holds one back.
+carried beside it has its own files as at its tag (the shared files stay HEAD's). A print
+volume's Classic prints its books' Classic text: a Modern change never holds it back (its
+Modern English edition, below, is held back by those instead).
 
 **Print volumes** (colophon 0.43.0; first: Owen on Sin, 2026-11-10): a paperback made of
 other books' editions, each still its own book with its own TEI, ebook and sign-off. Its
@@ -259,6 +260,25 @@ volume back (its files are listed as the volume's changes) and a release carries
 from its tag. No point versions (no ebook). In `stable` a carried volume's folder is as
 tagged but its books' folders are as released, so a reader building it from `stable` after
 a book was re-signed gets the newer chapters; the release's PDFs are built from the tag.
+
+A print volume with a `-modern` print file (colophon 0.59.0; Owen on Sin's
+`owen-on-sin-modern.typ`, including the books' `chapters/modern`, and `cover-modern.typ`)
+has a **Modern English edition**, released on its own as a book's is: `editions()` gives it
+Classic and Modern (or when a `<author>/<volume>/modern/vN` tag exists), files are whose by
+`release.classifier` (`-modern` files the Modern's, `cover.typ` and `volume.toml` shared, the
+Classic print file and cover the Classic's), and each edition's gates (record, clean, print)
+build only its own print file and cover. Its `RELEASE.toml` gets a `[modern]` table (its own
+`summary`, required; `accepted_print`) with `[[modern.book]]` entries, each book at its newest
+Modern sign-off (`version = "v1"` names `<a>/<b>/modern/v1`); `./fgb release record VOLUME`
+writes both lists, keeping the hand-edited text above each. The Modern volume can be signed
+(`./fgb release sign VOLUME --modern`) only when each book's Modern edition is signed, newest,
+unchanged since in its Modern files, and done (or holds, for `--trial`); a change to a book's
+Modern files holds back only the Modern volume. `status` shows `<author>/<volume> (Modern)`,
+`revisions.json` counts it as `<author>/<volume>/modern`, the catalog row is "Modern English"
+with the books' Modern tags as its made-from line, its files are named as a Modern book's
+(`owen-on-sin-v1-modern.pdf`, `owen-on-sin-v1-cover-modern.pdf`), and `site.json` lists it
+under `print_volumes` with `unit` and `edition` "modern". No point versions, as the Classic's.
+A volume without a `-modern` print file is as before.
 
 `./fgb coverage [BOOK]` (`coverage.py`) counts, from the TEI, how faithful an
 edition is to its source: printed words (in the divisions it keeps, not

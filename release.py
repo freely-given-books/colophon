@@ -20,7 +20,9 @@ again. Books move on one at a time; none drops out of a release for it.
                                  and their checksums), to fill in and commit;
                                  for a book with a Modern English edition,
                                  with a [modern] table (added to a record
-                                 that lacks one)
+                                 that lacks one); for a print volume, the
+                                 signed versions of its books (and of their
+                                 Modern editions, for a volume with one)
   ./fgb release sign BOOK [N]    run the gates on BOOK, then cut the signed
                                  tag <author>/<book>/vN (the editor's step;
                                  N: one past the last version,
@@ -142,6 +144,29 @@ can be signed off only when each of those is that book's newest sign-off and the
 book is unchanged since, and it is held back, like a changed book, as soon as
 one of its books changes after the version it names. Its versions are its own
 Lulu revisions (no point versions: it has no ebook).
+
+A print volume with a -modern print file (fgb.modern_name: owen-on-sin-modern.typ,
+which includes its books' chapters/modern, and cover-modern.typ) has a Modern
+English edition too, two release units as a book has: the Classic volume
+(<author>/<volume>/vN, its Classic print file and cover, made from its books'
+Classic sign-offs) and the Modern volume (<author>/<volume>/modern/vN,
+books/revisions.json id <author>/<volume>/modern, its -modern files, made from
+its books' Modern sign-offs <a>/<b>/modern/vN). Its files are whose as a book's
+are (classifier(): cover.typ, which cover-modern.typ imports, and volume.toml are
+shared). Its RELEASE.toml's [modern] table has a summary of its own, the
+Modern volume's accepted_print, and [[modern.book]] entries that `record`
+writes from each book's newest Modern sign-off:
+
+  [modern]
+  summary = "..."
+  [[modern.book]]
+  book = "john-owen/of-temptation"
+  version = "v1"           # the tag john-owen/of-temptation/modern/v1
+
+Each volume edition's gates (record, clean, print) build only its own print
+files and cover; a change to one of its books' Modern files holds back only
+the Modern volume, a Classic change only the Classic. `make` names its files as
+a Modern book's (owen-on-sin-v1-modern.pdf, owen-on-sin-v1-cover-modern.pdf).
 
 Signatures are checked against `allowed_signers` at the books repository's
 root (ssh-keygen's format), so anyone can check a tag the same way:
@@ -271,19 +296,26 @@ def has_modern(bk):
     return bool(e.get("modern") or any(v.get("modern") for v in e.get("volumes", [])))
 
 
+def volume_has_modern(bk):
+    """A print volume has a Modern English edition: a -modern print file
+    (fgb.modern_name: <volume>-modern.typ, made from its books' chapters/modern)."""
+    return any(fgb.modern_name(f) for f in bk.cfg.get("PRINT") or [bk.dir.name + ".typ"])
+
+
 def editions(d):
     """A book folder's release units: the Classic, and the Modern English when
-    the book has one (or one was signed off). A print volume has one."""
-    if (d / fgb.VOLUME).exists():
-        return [CLASSIC]
-    return [CLASSIC, MODERN] if has_modern(fgb.Book(d)) or book_tags(d, MODERN) \
-        else [CLASSIC]
+    the book has one (or one was signed off). A print volume likewise: its
+    Modern when it has a -modern print file (or one was signed off)."""
+    bk = fgb.Book(d)
+    has = volume_has_modern(bk) if bk.volume is not None else has_modern(bk)
+    return [CLASSIC, MODERN] if has or book_tags(d, MODERN) else [CLASSIC]
 
 
 def edition_title(bk, edition):
     if edition != MODERN:
         return bk.title
-    m = (bk.cfg.get("EPUB") or {}).get("modern") or {}
+    m = ((bk.volume or {}).get("modern") if bk.volume is not None
+         else (bk.cfg.get("EPUB") or {}).get("modern")) or {}
     return m.get("title") or f"{bk.title} (Modern English)"
 
 
@@ -451,20 +483,33 @@ def own_changes(d, edition, rev, files):
     return kept
 
 
+def volume_books(rec, edition=CLASSIC):
+    """The [[book]] entries of one edition of a print volume's RELEASE.toml:
+    the Classic's at the top level, the Modern's in its [modern] table
+    ([[modern.book]])."""
+    part = modern_record(rec) if edition == MODERN else (rec or {})
+    books = part.get("book", [])
+    return [x for x in books if isinstance(x, dict)] if isinstance(books, list) else []
+
+
 def made_from(s):
-    """A print volume's books as its RELEASE.toml names them: per book its
-    sign-off tag there, whether that tag exists, and the book's files changed
-    since it (committed or not)."""
+    """A print volume's books as its RELEASE.toml names them, for one of its
+    editions: per book its sign-off tag there (the book's Classic tag
+    <a>/<b>/vN for the Classic volume, its Modern tag <a>/<b>/modern/vN for the
+    Modern), whether that tag exists, and that edition's files of the book
+    changed since it (committed or not)."""
+    edition = s.get("edition", CLASSIC)
     out_ = []
-    for x in (s["record"] or {}).get("book", []):
+    for x in volume_books(s["record"], edition):
         b, v = x.get("book", ""), x.get("version", "")
-        tag = f"{b}/{v}"
+        tag = f"{b}{'/modern' if edition == MODERN else ''}/{v}"
         exists = bool(b and v) and git("rev-parse", "-q", "--verify", f"refs/tags/{tag}",
                                        check=False).returncode == 0
         d = REPO / "books" / b
-        # a volume prints the books' Classic text: their Modern files don't count
+        # each volume prints one edition of its books: the other's files don't count
         out_.append({"book": b, "version": v, "tag": tag, "exists": exists,
-                     "changed": changed_since(d, tag, CLASSIC)
+                     "edition": edition,
+                     "changed": changed_since(d, tag, edition)
                      if exists and d.is_dir() else []})
     return out_
 
@@ -572,10 +617,18 @@ def gate_volume_record(s, trial=False):
     """A print volume's record: the books of its volume.toml, in order, each at
     a version that is that book's newest sign-off, unchanged since and (but
     for a trial) signed by an allowed signer; its print files include nothing
-    of any other book."""
+    of any other book. The Modern volume's: its [modern] table, with a summary
+    of its own and its books at their newest Modern sign-offs."""
     bk = fgb.Book(s["dir"])
+    edition = s.get("edition", CLASSIC)
     bad = list(fgb.volume_problems(s["dir"]))
-    if not s["record"].get("summary"):
+    if edition == MODERN:
+        if not isinstance(s["record"].get("modern"), dict):
+            return bad + [f"no [modern] table in {RECORD} (./fgb release record "
+                          f"{s['slug']} adds one)"]
+        if not modern_record(s["record"]).get("summary"):
+            bad.append(f"no summary in {RECORD} [modern]")
+    elif not s["record"].get("summary"):
         bad.append(f"no summary in {RECORD}")
     named = [m["book"] for m in s["made_from"]]
     if named != bk.parts():
@@ -583,10 +636,12 @@ def gate_volume_record(s, trial=False):
                    f"{', '.join(bk.parts())} (./fgb release record {s['slug']})")
     for m in s["made_from"]:
         if not m["exists"]:
-            bad.append(f"{m['book']}: no sign-off {m['tag']} (./fgb release record "
+            what = f"no sign-off {m['tag']}" if m["version"] or edition != MODERN else \
+                "its Modern English edition is not signed off"
+            bad.append(f"{m['book']}: {what} (./fgb release record "
                        f"{s['slug']} names each book's newest)")
             continue
-        b = state(REPO / "books" / m["book"])
+        b = state(REPO / "books" / m["book"], edition)
         if b["tags"][0] != m["tag"]:
             bad.append(f"{m['book']}: made from {m['version']}, but its newest sign-off "
                        f"is {b['tag']['version']} (./fgb release record {s['slug']})")
@@ -634,7 +689,7 @@ def gate_builds(bk, outdir, edition=None):
 def run_gates(s, outdir, log=print, trial=False):
     """Every gate on one edition of a book; (built files, {gate: [problems]}).
     A print volume's: record, clean and print (it has no TEI or ebook of its
-    own). A Modern English edition's: record, clean, print and epub, on its
+    own), each of its editions on its own print files. A Modern English edition's: record, clean, print and epub, on its
     own files and build (verify and report are the TEI's: the Classic's)."""
     d = s["dir"]
     modern = s.get("edition") == MODERN
@@ -651,10 +706,12 @@ def run_gates(s, outdir, log=print, trial=False):
         log("  building ...")
         problems = []
         try:
-            files = fgb.build_pdf(fgb.Book(d), outdir, covers=True, problems=problems)
+            files = fgb.build_pdf(fgb.Book(d), outdir, covers=True, problems=problems,
+                                  edition=s.get("build"))
         except SystemExit as e:
             files, problems = [], [f"print build failed: {e}"]
-        accepted = set(s["record"].get("accepted_print", []) if s["record"] else [])
+        rec = s["record"] or {}
+        accepted = set((modern_record(rec) if modern else rec).get("accepted_print", []))
         res["_accepted"] = [p for p in problems if p in accepted and " footnote " in p]
         res["print"] = [p for p in problems if p not in res["_accepted"]]
         return files, res
@@ -724,7 +781,9 @@ def edition_of(a, d):
     if not getattr(a, "modern", False):
         return CLASSIC
     if MODERN not in editions(d):
-        sys.exit(f"{slug(d)} has no Modern English edition (EPUB[\"modern\"] in editorial.py)")
+        sys.exit(f"{slug(d)} has no Modern English edition " +
+                 ("(a -modern print file in volume.toml's print)" if (d / fgb.VOLUME).exists()
+                  else "(EPUB[\"modern\"] in editorial.py)"))
     return MODERN
 
 
@@ -789,7 +848,8 @@ def cmd_status(a):
             what += ready_note(s)
         print(f"  {s['name']:58} {what}")
         for m in s.get("made_from", []):
-            print(f"      made from {m['book']} {m['version'] or '?'}" +
+            print(f"      made from {m['book']} "
+                  f"{'Modern ' if m['edition'] == MODERN else ''}{m['version'] or '?'}" +
                   (f": {len(m['changed'])} file(s) changed since" if m["changed"] else
                    "" if m["exists"] else ": no such sign-off"))
         for f in s.get("changed", [])[:8]:
@@ -809,21 +869,77 @@ def cmd_status(a):
 
 
 VOLUME_BOOKS = "# The signed versions of the books this volume is made from"
+# the Modern English volume's part of its record: its [modern] table (kept as
+# edited), then its books' Modern versions, which `record` writes again
+VOLUME_MODERN = "# The Modern English edition of this volume"
+VOLUME_MODERN_BOOKS = "# The signed Modern English versions of the books it is made from"
+
+
+def volume_modern_head(d):
+    """The start of a print volume's [modern] table, as `record` first writes it."""
+    return "\n".join([
+        VOLUME_MODERN + ": a paperback of its own, made from the",
+        "# books' Modern English editions (its -modern print file), signed off on its own",
+        f"# ({unit(d, MODERN)}/vN: ./fgb release sign {slug(d)} --modern), with its",
+        "# own Lulu revisions. A change to this table holds back only it.",
+        "[modern]",
+        "# One or two sentences for the release catalog: the Modern English volume, its books.",
+        'summary = ""',
+        "# Stray footnotes in its print PDF the editor accepts, each by its message:",
+        "# accepted_print = []",
+        "", ""])
+
+
+def volume_book_lines(d, edition, before, label=""):
+    """One edition's [[book]] (or [[modern.book]]) entries of a print volume's
+    record: each book at its newest sign-off of that edition; says each."""
+    bk = fgb.Book(d)
+    q = lambda v: json.dumps(v, ensure_ascii=False)
+    table = "[[modern.book]]" if edition == MODERN else "[[book]]"
+    lines = []
+    for b in bk.parts():
+        tags = book_tags(REPO / "books" / b, edition)
+        v = tags[0].rsplit("/", 1)[-1] if tags else ""
+        lines += [table, f"book = {q(b)}", f"version = {q(v)}", ""]
+        s = state(REPO / "books" / b, edition)
+        was = f" (was {before[b]})" if before.get(b, v) != v else ""
+        print(f"  {label}{b}: {v or 'not signed off'}{was}" +
+              ("" if not tags else
+               f"; but {len(s['changed'])} file(s) changed since: sign it off again, "
+               "then record again" if s["changed"] else ""))
+    return lines
 
 
 def record_volume(d):
     """A print volume's RELEASE.toml: written, or its [[book]] entries brought
-    up to date (each book's newest sign-off), the rest kept as edited."""
+    up to date (each book's newest sign-off), the rest kept as edited. A
+    volume with a Modern English edition also gets a [modern] table, its
+    [[modern.book]] entries each book's newest Modern sign-off (the table's
+    head, above them, kept as edited)."""
     bk = fgb.Book(d)
     path = d / RECORD
-    q = lambda v: json.dumps(v, ensure_ascii=False)
+    modern = MODERN in editions(d)
+    modern_head, before_m = None, {}
     if path.exists():
         text = path.read_text(encoding="utf-8")
         if VOLUME_BOOKS not in text:
             sys.exit(f"{path.relative_to(REPO)}: no \"{VOLUME_BOOKS}\" line to write the "
                      "books' versions after; edit it by hand")
+        rec = tomllib.loads(text)
         head = text[:text.index(VOLUME_BOOKS)]
-        before = {m["book"]: m["version"] for m in made_from({"record": tomllib.loads(text)})}
+        rest = text[text.index(VOLUME_BOOKS):]
+        before = {m["book"]: m["version"] for m in made_from({"record": rec})}
+        if VOLUME_MODERN in rest:
+            if VOLUME_MODERN_BOOKS not in rest:
+                sys.exit(f"{path.relative_to(REPO)}: no \"{VOLUME_MODERN_BOOKS}\" line to "
+                         "write the books' Modern versions after; edit it by hand")
+            modern = True
+            modern_head = rest[rest.index(VOLUME_MODERN):rest.index(VOLUME_MODERN_BOOKS)]
+            before_m = {m["book"]: m["version"]
+                        for m in made_from({"record": rec, "edition": MODERN})}
+        elif "modern" in rec:
+            sys.exit(f"{path.relative_to(REPO)}: a [modern] table without the "
+                     f"\"{VOLUME_MODERN}\" line; edit it by hand")
     else:
         head = "\n".join([
             f"# Release record of {bk.title}: a print volume made of the editions of",
@@ -834,22 +950,23 @@ def record_volume(d):
             'summary = ""',
             "", ""])
         before = {}
+    label = lambda s: s if modern else ""
     lines = [VOLUME_BOOKS + ", each",
              f"# one's newest sign-off: ./fgb release record {slug(d)} writes them again",
              "# after a book is signed off again (then sign the volume off again).", ""]
-    for b in bk.parts():
-        tags = book_tags(REPO / "books" / b)
-        v = tags[0].rsplit("/", 1)[-1] if tags else ""
-        lines += ["[[book]]", f"book = {q(b)}", f"version = {q(v)}", ""]
-        s = state(REPO / "books" / b)
-        was = f" (was {before[b]})" if before.get(b, v) != v else ""
-        print(f"  {b}: {v or 'not signed off'}{was}" +
-              ("" if not tags else
-               f"; but {len(s['changed'])} file(s) changed since: sign it off again, "
-               "then record again" if s["changed"] else ""))
-    path.write_text(head + "\n".join(lines), encoding="utf-8")
+    lines += volume_book_lines(d, CLASSIC, before, label("Classic: "))
+    text = head + "\n".join(lines)
+    added = modern and modern_head is None
+    if modern:
+        lines = [VOLUME_MODERN_BOOKS + ",",
+                 "# each one's newest Modern sign-off (<author>/<book>/modern/vN), written",
+                 "# by ./fgb release record as for the Classic's above.", ""]
+        lines += volume_book_lines(d, MODERN, before_m, label("Modern:  "))
+        text += "\n" + (modern_head or volume_modern_head(d)) + "\n".join(lines)
+    path.write_text(text, encoding="utf-8")
     print(f"wrote {path.relative_to(REPO)}" +
-          ("" if before else ": fill in the summary, then commit it"))
+          ("" if before else ": fill in the summary, then commit it") +
+          ("; added a [modern] table: fill in its summary" if added and before else ""))
 
 
 def modern_table(d):
@@ -1086,9 +1203,10 @@ def cmd_sign(a):
     title = edition_title(fgb.Book(d), edition)
     # a print volume's tag says what it was made from, as its record does
     parts = ["Made from: " + "; ".join(
-        f"{fgb.Book(REPO / 'books' / m['book']).title} {m['version']} ({m['tag']})"
-        for m in s["made_from"]) + "."] if s["volume"] else []
-    based = modern_record(s["record"]).get("based_on") if edition == MODERN else ""
+        f"{edition_title(fgb.Book(REPO / 'books' / m['book']), edition)} {m['version']} "
+        f"({m['tag']})" for m in s["made_from"]) + "."] if s["volume"] else []
+    based = modern_record(s["record"]).get("based_on") \
+        if edition == MODERN and not s["volume"] else ""
     if based:
         parts.append(f"Based on: the Classic {based} ({slug(d)}/{based}).")
     msg = [f"{title}, v{n.lstrip('v')}"] + parts + lulu + ([a.note] if a.note else [])
@@ -1311,14 +1429,15 @@ def entry(s, bk, files, carried=False):
     part = modern_record(rec) if modern else rec
     t = s["tag"]
     made = [{"book": x["book"], "version": x["version"],
-             "tag": f"{x['book']}/{x['version']}"} for x in rec.get("book", [])]
+             "tag": f"{x['book']}{'/modern' if modern else ''}/{x['version']}"}
+            for x in volume_books(rec, MODERN if modern else CLASSIC)]
     return {
         "book": s["slug"], "unit": s["unit"], "edition": s.get("edition", CLASSIC),
         "folder": s["dir"].name,
         "title": edition_title(bk, s.get("edition")), "author": bk.author,
         "version": t["version"], "lulu_revision": version_key(t["tag"])[0],
         "summary": part.get("summary") or rec.get("summary", ""),
-        **({"based_on": part.get("based_on", "")} if modern else {}),
+        **({"based_on": part.get("based_on", "")} if modern and not bk.volume else {}),
         "signed_off": {"tag": t["tag"], "commit": t["commit"], "date": t["date"],
                        "signer": t["signer"], "note": t["note"],
                        "signature_verified": s["signed"]},
