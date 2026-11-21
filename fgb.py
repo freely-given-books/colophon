@@ -44,7 +44,7 @@ works from any folder.
                                   since); release.py has the rest:
   ./fgb release record|sign BOOK  a book's RELEASE.toml; the editor's sign-off
                                   (--modern: of its Modern English edition, a
-                                  release of its own)
+                                  release of its own; a print volume's too)
   ./fgb release make              every done book, checked and built, into
                                   dist/release/<date>/ and the stable branch
   ./fgb export DIR [--release R]  the newest release (or R) laid out for the
@@ -86,7 +86,8 @@ files and a volume.toml:
   title = "Owen on Sin"
   author = "John Owen"
   books = ["john-owen/of-temptation", "john-owen/the-mortification-of-sin"]
-  print = ["owen-on-sin.typ"]     # optional, as PRINT (default <folder>.typ)
+  print = ["owen-on-sin.typ", "owen-on-sin-modern.typ"]
+                                  # optional, as PRINT (default <folder>.typ)
   covers = ["cover.typ"]          # optional, as COVERS (default cover*.typ)
 
 Its print files #include the books' chapters/typ (../<book>/chapters/typ/...)
@@ -94,6 +95,10 @@ and nothing of any other book. ./fgb build and ./fgb pdf make its PDFs and
 covers with the usual Lulu and page checks; it has no TEI and no EPUB.
 ./fgb release gives it a RELEASE.toml naming the signed version of each book
 it is made from, and holds it back when one of them changes (release.py).
+A -modern print file (owen-on-sin-modern.typ, including the books'
+chapters/modern; its cover cover-modern.typ) is the volume's Modern English
+edition, released on its own like a book's (sign --modern), made from the
+books' Modern English sign-offs ([modern] in its RELEASE.toml).
 """
 
 import argparse
@@ -1027,8 +1032,9 @@ def main():
     p.add_argument("--clear", action="store_true",
                    help="ready: take back an earlier \"ready to sign\"")
     p.add_argument("--modern", action="store_true",
-                   help="sign, ready: the book's Modern English edition, released on its own "
-                   "(tags <author>/<book>/modern/vN, its own Lulu revisions)")
+                   help="sign, ready: the book's (or print volume's) Modern English edition, "
+                   "released on its own (tags <author>/<book>/modern/vN, its own Lulu "
+                   "revisions)")
     p.add_argument("--out", help="make: folder for the release (default: dist/release/)")
     p.add_argument("--trial", action="store_true",
                    help="make: take unverified sign-offs and an unreleased colophon; "

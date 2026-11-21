@@ -67,7 +67,9 @@ the owner the plan (which books change, which are new) before writing.
   volume, for a book in volumes; `""` = none yet), `note` (anything particular
   to this book's import: follow it), `files`. `print_volumes`: paperbacks that
   bind other books together (Owen on Sin), with their books and Lulu link;
-  each of those books has its own entry with its ebook.
+  each of those books has its own entry with its ebook. A volume's Modern English
+  edition is a print volume of its own (`unit` `<author>/<book>/modern`, `edition`
+  `modern`, files named `-modern`), made from its books' Modern English editions.
 - `catalog.json`: the full release record (sign-offs, sources, witnesses,
   fidelity counts). Reference only.
 - `<author>/<book>/`:
@@ -252,9 +254,14 @@ def site_manifest(rel):
             volume = REPO / "books" / b["book"] / "volume.toml"
             members = tomllib.loads(volume.read_text(encoding="utf-8")).get("books", []) \
                 if volume.exists() else []
-            print_volumes.append({"book": b["book"], "title": b["title"], "author": b["author"],
-                                  "version": b["version"], "books": members,
-                                  "lulu": p.get("lulu", ""), "note": p.get("note", "")})
+            v = {"book": b["book"], "title": b["title"], "author": b["author"],
+                 "version": b["version"], "books": members,
+                 "lulu": p.get("lulu", ""), "note": p.get("note", "")}
+            if modern:
+                # the volume's Modern English edition: its own paperback, made from
+                # its books' Modern English editions (their entries' unit .../modern)
+                v.update(unit=b["unit"], edition="modern")
+            print_volumes.append(v)
             continue
         slug = p.get("slug", b["folder"] + ("-modern" if modern else ""))
         vols = {}
