@@ -29,7 +29,10 @@ def smallcaps_phrases(root, phrases):
     ("salvation is [all of grace], which"; ^ and $ for the block's start and
     end: "^[UNGODLY]$"); it is matched in one block (or one italic run)
     without regard to case or spacing, and must be found exactly once and
-    cover whole elements (a <choice> is not split)."""
+    cover whole elements (a <choice> is not split). An entry may be a pair
+    (xml:id, phrase): the phrase is looked for only in that element and the
+    blocks inside it, for words printed alike elsewhere (Calvin's "TO" over
+    the salutation to Francis and over the index)."""
     if not phrases:
         return
 
@@ -68,7 +71,16 @@ def smallcaps_phrases(root, phrases):
         return "\x02" + "".join(chars) + "\x03", [(-1, -1)] + where + [(-1, -1)]
 
     blocks = [el for el in root.iter(*[T + n for n in SC_CONTAINERS])]
+    xml_id = "{http://www.w3.org/XML/1998/namespace}id"
     for entry in phrases:
+        scope = blocks
+        if isinstance(entry, tuple):
+            bid, entry = entry
+            outer = [el for el in root.iter() if el.get(xml_id) == bid]
+            if len(outer) != 1:
+                raise ValueError(f"SMALLCAPS_PHRASES: no element {bid!r}")
+            scope = [el for el in blocks
+                     if el is outer[0] or outer[0] in el.iterancestors()]
         m = re.fullmatch(r"(.*)\[(.+)\](.*)", entry, re.S)
         if not m:
             raise ValueError(f"SMALLCAPS_PHRASES: no [words] in {entry!r}")
@@ -78,7 +90,7 @@ def smallcaps_phrases(root, phrases):
         before = "\x02" + before[1:] if before.startswith("^") else before
         after = after[:-1] + "\x03" if after.endswith("$") else after
         found = []
-        for el in blocks:
+        for el in scope:
             items = atoms(el)
             text, where = norm(items)
             k = text.find(before + words + after)
