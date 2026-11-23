@@ -720,6 +720,15 @@ def restructure(splits, log):
     merge_lists(log)            # lists that a run-on paragraph kept apart
 
 
+def item_opens_with(tok):
+    """True when tok is the first word of the list item it stands in."""
+    item = next((a for a in ancestors(tok) if local(a.el) == "item"), None)
+    if item is None:
+        return False
+    fw = first_words(item, 1)
+    return bool(fw) and fw[0] is tok
+
+
 def collect_splits(struct, stream_index, log):
     splits = []
     for s in struct:
@@ -745,7 +754,14 @@ def collect_splits(struct, stream_index, log):
             splits.append((labels[0] if labels else tok, "+", labels, order, s["label"]))
         elif s["tgt_marks"] == ["+"] and s["src_marks"] in (["¶"], ["-"]):
             labels = []
-            if len(Sw) >= 2 and NUMERAL_RE.fullmatch(Sw[0][0]) and Sw[1][0] in ".)":
+            # the numeral that opens a list item: an earlier numeral in the
+            # cluster (a scripture number the review changed) is not its label
+            for i in range(len(Sw) - 1):
+                if NUMERAL_RE.fullmatch(Sw[i][0]) and Sw[i + 1][0] in ".)" and \
+                        item_opens_with(Sw[i][2]):
+                    labels = [Sw[i][2], Sw[i + 1][2]]
+                    break
+            if not labels and len(Sw) >= 2 and NUMERAL_RE.fullmatch(Sw[0][0]) and Sw[1][0] in ".)":
                 labels = [Sw[0][2], Sw[1][2]]
             kind = "+" if s["src_marks"] == ["¶"] else "renumber"
             splits.append((labels[0] if labels else tok, kind, labels, order, s["label"]))
