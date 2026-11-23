@@ -97,6 +97,8 @@ OPENING_SMALLCAPS = False
 # brackets, matched without regard to case or spacing:
 #   "salvation is [all of grace], which"   "[HE WHO SPOKE] and wrote"
 # ^ and $ stand for the start and end of the block: "^[UNGODLY]$".
+# An entry may be a pair (xml:id, phrase), looked for only in that element:
+#   ("ccel-ii.viii-p0.2", "^[TO]$")
 SMALLCAPS_PHRASES = ()
 
 
