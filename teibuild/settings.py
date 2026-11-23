@@ -92,6 +92,13 @@ DROP_CAP_CASE = False
 OPENING_SMALLCAPS = False
 
 
+# A little space after a printed summary standing in the text, before the text
+# (layout.summary_end: an <argument>, or a run of set-off paragraphs opening a
+# division; Calvin's chapter synopses): "0.8em" (print's #v; the ebook's div.space,
+# which the CSS sizes), None for none.
+SUMMARY_SPACE = None
+
+
 # Words this edition sets in small capitals (smallcaps_phrases): a list of
 # the printed words with a little context, the small-capital words in
 # brackets, matched without regard to case or spacing:

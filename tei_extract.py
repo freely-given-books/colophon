@@ -531,17 +531,28 @@ def noise(text, prev, nxt, leading=False):
     return prev is not None and nxt is not None and local(prev) in j and local(nxt) in j
 
 
+def summary_space(r):
+    """SUMMARY_SPACE (editorial.py): the space set after a printed summary in
+    the text (layout.summary_end), as "0.8em"; None for none."""
+    return getattr(r, "settings", {}).get("SUMMARY_SPACE") if r.layer == "reg" else None
+
+
 def div_blocks(r, div, level=2, lines=None):
     """Render the non-heading content of a division as Typst lines (added to
     `lines` when given, so a block can run on into the one before it)."""
     lines = [] if lines is None else lines
     enum_set = False
+    prev = None
     for c in div:
         if not isinstance(c.tag, str):
             continue
         n = local(c)
         if n in ("head", "pb", "speaker"):
             continue
+        if summary_space(r) and prev is not None and layout.summary_end(prev):
+            # a little space before the text; #v is layout, which the review drops
+            lines += [f"#v({summary_space(r)})", ""]
+        prev = c
         if n == "sp":
             lines += sp_lines(r, c, level)
             continue
@@ -1052,7 +1063,7 @@ def book_settings(tei_path):
     return {k: ns[k] for k in ("TYPST_PREAMBLE", "TYPST_HEADING", "TYPST_ENUM",
                                "TYPST_NUMBERED_PARAGRAPHS", "VERSE_LINEBREAKS", "SMALLCAPS",
                                "CLOSER_PLAIN", "SPEECH_BLOCKS", "STANZA_BLOCKS", "SIGNATURE_NAME_LINE",
-                               "RUN_IN_PLAIN")
+                               "RUN_IN_PLAIN", "SUMMARY_SPACE")
             if k in ns}
 
 
@@ -1116,6 +1127,9 @@ def layout_file_lines(r, f, cfg, pre):
             # from the text below; #v is layout, which the review drops
             lines += ["#align(center)[#block(width: 85%)[", "  #set par(justify: false)",
                       f"  #strong[{t}]", "]]", "", "#v(0.9em)", ""]
+        elif t and r.layer == "reg" and f.get("subtitle_rend") == "smallcaps":
+            # a printed title in capitals (Calvin's chapter titles), in small capitals
+            lines += [f"#align(center)[#smallcaps(all: true)[{t}]]", ""]
         elif t:
             lines += [f"#align(center)[{t}]" if r.layer == "reg" else t, ""]
         for extra in subs[1:]:
@@ -1131,6 +1145,8 @@ def layout_file_lines(r, f, cfg, pre):
             lines += [ref_t, "", verse_t, ""]
     for el in f["parts"]:
         part_lines(r, el, 3, lines)
+        if summary_space(r) and layout.summary_end(el):
+            lines += [f"#v({summary_space(r)})", ""]   # layout, which the review drops
     lines = join_run_on(lines)
     while lines and lines[-1] == "":
         lines.pop()

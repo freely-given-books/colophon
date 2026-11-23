@@ -200,6 +200,7 @@ LAYOUT_SHOW = (
     '#let fgb-styled = [#set text(red); x].func()\n'
     '#show pad: it => html.elem("div", attrs: (class: "fgb-pad", "data-em": str(it.left.length.em)), it.body)\n'
     '#show align: it => html.elem("div", attrs: (class: "fgb-align", "data-align": repr(it.alignment)), it.body)\n'
+    '#show v: it => html.elem("div", attrs: (class: "space"))\n'
     '#show block: it => if it.inset != (:) or it.width != auto {\n'
     '  let kids = if it.body.func() == [].func() { it.body.children } else { (it.body,) }\n'
     '  html.elem("div", attrs: (class: "fgb-block", "data-inset": repr(it.inset != (:)),\n'
@@ -270,9 +271,13 @@ def edition_blocks(body, counts=None, subtitle=False):
     #speech p.speech (SPEECH_BLOCKS); #stanza p.verse;
     small capitals span.smallcaps."""
     for sp in body.iter("span"):
-        if (sp.get("style") or "").replace(" ", "") == "font-variant-caps:small-caps":
+        style = (sp.get("style") or "").replace(" ", "")
+        if style == "font-variant-caps:small-caps":
             del sp.attrib["style"]
             sp.set("class", "smallcaps")
+        elif style == "font-variant-caps:all-small-caps":     # #smallcaps(all: true)
+            del sp.attrib["style"]
+            sp.set("class", "smallcaps all")
     # a speech or stanza mark inside another block (a summary's #set par(justify: false)) is
     # a plain paragraph of that block
     for el in list(body.iter("div")):

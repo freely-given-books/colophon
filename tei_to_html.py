@@ -235,6 +235,10 @@ class HtmlR(R):
     def linebreak(self):
         return "<br/>"
 
+    def summary_space(self):
+        """SUMMARY_SPACE: a space after a printed summary in the text (as tei_extract)."""
+        return self.layer == "reg" and getattr(self, "settings", {}).get("SUMMARY_SPACE")
+
     def smallcaps(self, inner):
         how = getattr(self, "settings", {}).get("SMALLCAPS")
         if how == "strong":
@@ -581,6 +585,8 @@ class HtmlR(R):
                 out.append(f'<p class="inset summary">{t}</p>')      # a printed summary
             elif t and self.layer == "reg" and f.get("subtitle_rend") == "strong":
                 out.append(f'<p class="subtitle strong">{t}</p>')    # bold, set off
+            elif t and self.layer == "reg" and f.get("subtitle_rend") == "smallcaps":
+                out.append(f'<p class="subtitle"><span class="smallcaps all">{t}</span></p>')
             elif t:
                 out.append(f'<p class="subtitle">{t}</p>')
             for extra in subs[1:]:
@@ -599,6 +605,8 @@ class HtmlR(R):
                 out += self.head_html(el, div, self.levels.get(div.get("type"), 2))
             else:
                 self.blocks([el], 2, out)      # may run on from the block before
+            if self.summary_space() and layout.summary_end(el):
+                out.append('<div class="space"></div>')     # as tei_extract
         out = finish(join_run_on(out))
         heads = [re.sub(r"<[^>]+>", "", x) for x in out if re.match(r"<h[1-6]>", x)]
         self.title = title or (heads[0] if heads else ident)
@@ -624,12 +632,16 @@ class HtmlR(R):
         finish once every block that may run on has joined."""
         if out is None:
             return finish(self.blocks(div, level, []))
+        prev = None
         for c in div:
             if not isinstance(c.tag, str):
                 continue
             n = local(c)
             if n in ("head", "pb", "speaker"):
                 continue
+            if self.summary_space() and prev is not None and layout.summary_end(prev):
+                out.append('<div class="space"></div>')     # as tei_extract
+            prev = c
             if n == "sp":
                 # the speaker ("Christian:") opens the speech's first paragraph
                 inner = self.blocks(c, level)
@@ -886,6 +898,8 @@ def divisions(root, r, cfg=None, only=None):
         r.settings = dict(getattr(r, "settings", {}), SIGNATURE_NAME_LINE=True)
     if (cfg or {}).get("SPEECH_BLOCKS"):
         r.settings = dict(getattr(r, "settings", {}), SPEECH_BLOCKS=True)
+    if (cfg or {}).get("SUMMARY_SPACE"):
+        r.settings = dict(getattr(r, "settings", {}), SUMMARY_SPACE=cfg["SUMMARY_SPACE"])
     if (cfg or {}).get("RUN_IN_PLAIN"):
         r.settings = dict(getattr(r, "settings", {}), RUN_IN_PLAIN=set(cfg["RUN_IN_PLAIN"]))
     if files is not None:
