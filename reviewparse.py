@@ -114,6 +114,7 @@ def _scan(s, out_body, notes, italic=False, in_note=None, buf=None, sp_state=Non
                 i += m.end()
                 continue
             m = re.match(r"#(emph|strong|super|smallcaps|quote|footnote)\[", s[i:]) or \
+                re.match(r"#(smallcaps)\(all: true\)\[", s[i:]) or \
                 re.match(r"#(align)\([^)]*\)\[", s[i:]) or \
                 re.match(r'#(footnote)\(numbering: \(\.\.\) => "([^"]*)"\)\[', s[i:])
             if m:

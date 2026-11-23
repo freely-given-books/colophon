@@ -19,6 +19,9 @@ the TEI root element and returning a list of files, in reading order:
                                            # arguments), set off as a block indented
                                            # both sides, a size smaller, ragged
                                            # right, not centred
+                                           # "smallcaps": a printed title in
+                                           # capitals set in small capitals
+                                           # (Calvin's chapter titles)
                                            # "strong": a printed chapter title,
                                            # bold in a narrower centred column,
                                            # space after (Watson)
@@ -78,6 +81,29 @@ def book_layout(root, cfg):
         f.setdefault("subtitle_rend", None)
         f.setdefault("epigraph", None)
     return files
+
+
+def summary_end(el):
+    """Whether el ends a printed summary standing in the text, before the text
+    itself (Calvin's chapter synopses): an <argument>, or the last of a run of
+    paragraphs set off (p[@rend="inset"]) that opens its division (after its
+    heads, or after a printed title standing as its first paragraph: Calvin's
+    I.7). The edition sets a little space after it."""
+    def block(e):
+        return isinstance(e.tag, str) and local(e) not in ("head", "pb", "note")
+    nxt = next((e for e in el.itersiblings() if block(e)), None)
+    if nxt is None:
+        return False
+    if local(el) == "argument":
+        return True
+    def inset(e):
+        return local(e) == "p" and e.get("rend") == "inset"
+    if not inset(el) or inset(nxt) or local(el.getparent()) != "div":
+        return False
+    before = [e for e in el.itersiblings(preceding=True) if block(e)][::-1]
+    if before and not inset(before[0]):
+        before = before[1:]
+    return all(inset(e) for e in before)
 
 
 def subtitles(f):
