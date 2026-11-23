@@ -1101,8 +1101,10 @@ def layout_file_lines(r, f, cfg, pre):
         short = esc(f["short"]) if f["short"] else title
         lines += [tpl.format(n="", title=title, short=short) if tpl
                   else f"== {title}", ""]
-    if f.get("subtitle") is not None:
-        t = collapse(r.inline(f["subtitle"])).strip()
+    subs = layout.subtitles(f)
+    # several heads (a list): the first as a single subtitle is set, the rest one centred line each
+    if subs:
+        t = collapse(r.inline(subs[0])).strip()
         if t and r.layer == "reg" and f.get("subtitle_rend") == "inset":
             # a printed summary: set off, a size smaller, ragged right (its long
             # runs of dash-joined phrases leave justification few breaks)
@@ -1116,6 +1118,10 @@ def layout_file_lines(r, f, cfg, pre):
                       f"  #strong[{t}]", "]]", "", "#v(0.9em)", ""]
         elif t:
             lines += [f"#align(center)[{t}]" if r.layer == "reg" else t, ""]
+        for extra in subs[1:]:
+            t = collapse(r.inline(extra)).strip()
+            if t:
+                lines += [f"#align(center)[{t}]" if r.layer == "reg" else t, ""]
     if f.get("epigraph"):
         ref, verse = f["epigraph"]
         ref_t, verse_t = (collapse(r.inline(e)).strip() for e in (ref, verse))

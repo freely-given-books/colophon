@@ -224,7 +224,7 @@ def build_layout(args, tree, root, text, toks, files, cfg=None):
             title = review.headings[0] if review.headings else None
             if f["title"] and title and " ".join(title.split()) != " ".join(f["title"].split()):
                 unresolved.append((fname, "file title (change it in the LAYOUT)", title))
-            sub = [f["subtitle"]] if f.get("subtitle") is not None else []
+            sub = layout.subtitles(f)
             sub += list(f.get("epigraph") or [])
             SUBTITLES.update(sub)
             view = View([by_el[p] for p in sub + f["parts"]], None)
