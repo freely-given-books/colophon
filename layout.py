@@ -11,6 +11,8 @@ the TEI root element and returning a list of files, in reading order:
      "title": "Serving Each Other",        # the edition's heading for the file
      "short": None,                        # optional short (running-head) title
      "subtitle": el,                       # optional: a printed head set under
+                                           # (or a list of heads, one centred line each:
+                                           # Calvin's salutation to Francis I)
                                            # the title, as a centred line
      "subtitle_rend": None,                # "inset": the subtitle is a printed
                                            # summary of the file (Owen's chapter
@@ -78,6 +80,14 @@ def book_layout(root, cfg):
     return files
 
 
+def subtitles(f):
+    """A file's subtitle heads as a list (the layout may give one element or several)."""
+    s = f.get("subtitle")
+    if s is None:
+        return []
+    return list(s) if isinstance(s, (list, tuple)) else [s]
+
+
 def div_levels(cfg):
     return dict(cfg.get("DIV_LEVELS", {})), set(cfg.get("RUN_IN_DIVS", ()))
 
@@ -96,7 +106,7 @@ def check(root, files, cfg):
     skip_blocks = set(cfg["SKIP_BLOCKS"](root)) if cfg.get("SKIP_BLOCKS") else set()
     covered = set()
     for f in files:
-        for p in f["parts"] + ([f["subtitle"]] if f.get("subtitle") is not None else []) \
+        for p in f["parts"] + subtitles(f) \
                 + list(f.get("epigraph") or []):
             covered.add(p)
     missing = []

@@ -574,14 +574,19 @@ class HtmlR(R):
             out.append(f"<h3>{html.escape(title, quote=False)}</h3>")
         if f.get("kicker"):
             out.append(f'<p class="kicker">{html.escape(f["kicker"], quote=False)}</p>')
-        if f.get("subtitle") is not None:
-            t = self.text(f["subtitle"])
+        subs = layout.subtitles(f)
+        if subs:
+            t = self.text(subs[0])
             if t and self.layer == "reg" and f.get("subtitle_rend") == "inset":
                 out.append(f'<p class="inset summary">{t}</p>')      # a printed summary
             elif t and self.layer == "reg" and f.get("subtitle_rend") == "strong":
                 out.append(f'<p class="subtitle strong">{t}</p>')    # bold, set off
             elif t:
                 out.append(f'<p class="subtitle">{t}</p>')
+            for extra in subs[1:]:
+                t = self.text(extra)
+                if t:
+                    out.append(f'<p class="subtitle">{t}</p>')
         if f.get("epigraph"):
             ref, verse = (self.text(e) for e in f["epigraph"])
             out.append(self.epigraph_div(ref, verse) if self.layer == "reg"
