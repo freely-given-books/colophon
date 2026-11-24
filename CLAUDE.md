@@ -217,6 +217,17 @@ unverified tags, into `stable-trial`). It pushes nothing. Two builds of a
 book have the same text but not the same bytes yet: the PDF's creation date
 and the EPUB's `dcterms:modified` and zip times differ.
 
+`make` builds only what changed (0.64.0, the editor, 2026-11-24): it keeps each
+edition's built files in `<out>/.built/` (`dist/release/.built/`: each file once,
+named by its sha256, hard-linked from the release folders, and `index.json`). An
+edition whose sign-off tag and commit, colophon release and `typst --version` are
+those of its last build is not built again; its files are linked into the new
+release after its record and clean gates (`release.Store`, `release.reuse`). So a
+release after one book's re-sign builds that book (all 37 editions: 502 s to 46 s),
+and an unchanged book keeps its bytes from release to release. A changed book, one
+whose stored files are missing or damaged, a colophon that is not at a release tag,
+or `--rebuild` builds as before. Deleting `.built/` is safe: the next make builds all.
+
 `make` also records each print book's facts in `catalog.json` (`printfacts.py`, 0.63.0), so a
 site never opens the PDFs: an interior PDF's file record gets `print` (`pages`, `width`,
 `height` in inches), a cover PDF's gets `wrap` (`spine` in inches, the spine's average

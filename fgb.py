@@ -1039,6 +1039,8 @@ def main():
     p.add_argument("--trial", action="store_true",
                    help="make: take unverified sign-offs and an unreleased colophon; "
                    "commit to stable-trial, publish nothing")
+    p.add_argument("--rebuild", action="store_true",
+                   help="make: build every book, none from dist/release/.built")
     p.set_defaults(fn=lambda a: __import__("release").main(a))
     p = sub.add_parser("export", help="a release laid out for the books.freely.giving "
                        "site, with its IMPORT.md (export.py)")
