@@ -217,6 +217,15 @@ unverified tags, into `stable-trial`). It pushes nothing. Two builds of a
 book have the same text but not the same bytes yet: the PDF's creation date
 and the EPUB's `dcterms:modified` and zip times differ.
 
+`make` also records each print book's facts in `catalog.json` (`printfacts.py`, 0.63.0), so a
+site never opens the PDFs: an interior PDF's file record gets `print` (`pages`, `width`,
+`height` in inches), a cover PDF's gets `wrap` (`spine` in inches, the spine's average
+`color`, and `back`/`spine_image`/`front`, the cover cut at the trim and spine lines into
+`<cover>-back.webp` etc., 900px wide, files of the release like any other). A cover pairs with
+the interior of its name without `-cover`. The first step of the plan for site builds that do
+not grow with the library (the editor, 2026-11-23: book files to Cloudflare R2, the site's
+`/files/` redirected there by httpd).
+
 **Two editions, two releases** (the editor's decision, 2026-11-17): a book with a Modern
 English edition is two release units, each its own Lulu paperback, signed off and held back on
 its own. The Classic keeps `<author>/<book>/vN` (old tags and `books/revisions.json` keep

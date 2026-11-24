@@ -188,6 +188,7 @@ from pathlib import Path
 import coverage
 import fgb
 import packages
+import printfacts
 
 REPO = fgb.REPO
 RECORD = "RELEASE.toml"
@@ -1550,6 +1551,9 @@ def cmd_make(a):
                  "book that no longer passes needs fixing and a new sign-off.")
     # a book's Classic and Modern side by side, the Classic first
     entries.sort(key=lambda e: (e["book"], e.get("edition") == MODERN))
+    # page counts, trims and cover wraps, so a site never opens the PDFs
+    for name in printfacts.add(root, entries, sha256):
+        print(f"note: {name}: its size does not fit its trim: no wrap images")
     md, js = catalog(rid, entries, colophon, a.trial)
     (root / "CATALOG.md").write_text(md, encoding="utf-8")
     (root / "catalog.json").write_text(js, encoding="utf-8")
