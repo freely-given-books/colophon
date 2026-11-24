@@ -1452,6 +1452,107 @@ def entry(s, bk, files, carried=False):
         "files": files}
 
 
+# -- an unchanged book's files from an earlier make ---------------------------
+#
+# make keeps every edition's built files in a store beside the releases
+# (<out>/.built/: each file once, under its sha256, hard-linked from the
+# release folders where it can be, and index.json). An edition whose sign-off
+# (tag and commit), colophon release and Typst are those of its last build is
+# not built again: its files come from the store, so a release after one typo
+# fix builds that one book. A missing or damaged stored file, a colophon that
+# is not a release, or --rebuild builds it as before.
+
+def build_key(s, colophon):
+    """What an edition's files are made from: its sign-off, the tools."""
+    t = s["tag"]
+    typst = shutil.which("typst")
+    tv = subprocess.run([typst, "--version"], capture_output=True,
+                        text=True).stdout.strip() if typst else "no typst"
+    return f"{t['tag']} {t['commit']} | colophon {colophon} | {tv}"
+
+
+def place(src, dest):
+    """dest as a copy of src: a hard link where the file system allows."""
+    if dest.exists():
+        dest.unlink()
+    try:
+        os.link(src, dest)
+    except OSError:
+        shutil.copy2(src, dest)
+
+
+class Store:
+    def __init__(self, out, use=True):
+        self.dir = out / ".built"
+        self.use = use
+        p = self.dir / "index.json"
+        self.index = json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+
+    def take(self, s, key, root):
+        """The edition's files linked into root from its last build with
+        this key: (files, its entry then); None to build it."""
+        if not self.use:
+            return None
+        got = self.index.get(s["unit"])
+        if not got or got["key"] != key:
+            return None
+        for f in got["files"]:
+            p = self.dir / f["sha256"]
+            if not p.is_file() or p.stat().st_size != f["bytes"] or sha256(p) != f["sha256"]:
+                print(f"  {f['name']}: not in the store as built: building again")
+                return None
+        for f in got["files"]:
+            place(self.dir / f["sha256"], root / f["name"])
+        return [dict(f) for f in got["files"]], got["entry"]
+
+    def keep(self, s, key, root, files, e):
+        """Remember an edition's files (in root) and its entry for later makes."""
+        self.dir.mkdir(parents=True, exist_ok=True)
+        for f in files:
+            p = self.dir / f["sha256"]
+            if not p.exists():
+                place(root / f["name"], p)
+        self.index[s["unit"]] = {"key": key, "files": files,
+                                 "entry": json.loads(json.dumps(e))}
+        self.save()
+
+    def save(self):
+        if not self.dir.exists():
+            return
+        (self.dir / "index.json").write_text(
+            json.dumps(self.index, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+        # each edition's last build only
+        live = {f["sha256"] for u in self.index.values() for f in u["files"]}
+        for p in self.dir.iterdir():
+            if p.name != "index.json" and p.name not in live:
+                p.unlink()
+
+
+def reuse(s, key, store, root, trial, carried=False):
+    """The edition's entry made from its stored files, or None to build it.
+    A done edition still passes its record and clean gates (the rest are its
+    sign-off's text and the tools, which the key holds)."""
+    if not carried:
+        res = {"record": gate_record(s, trial), "clean": []}
+        dirty = uncommitted(s["dir"])
+        if s.get("build"):
+            dirty = own_changes(s["dir"], s["edition"], None, dirty)
+        if any(res.values()) or dirty:
+            return None
+    got = store.take(s, key, root)
+    if not got:
+        return None
+    files, old = got
+    if carried:
+        e = dict(old, files=files, carried=True)
+        e["signed_off"] = dict(old["signed_off"], signature_verified=s["signed"])
+    else:
+        e = entry(s, fgb.Book(s["dir"]), files)
+    print(f"  unchanged since its last build ({s['tag']['tag']}, same tools): "
+          f"{len(files)} file(s) from {store.dir.name}/")
+    return e
+
+
 def cmd_make(a):
     if not shutil.which("epubcheck"):
         sys.exit("a release needs epubcheck installed")
@@ -1486,9 +1587,17 @@ def cmd_make(a):
         shutil.rmtree(root)
     root.mkdir(parents=True)
     entries, failed = [], []
+    # unchanged editions come from the store (above); a colophon that is not
+    # a release is not a fixed tool, so a trial on one builds everything
+    store = Store(root.parent, use=not getattr(a, "rebuild", False) and bool(colophon_release()))
+    keys = {s["unit"]: build_key(s, colophon) for s in done + carried}
     for s in done:
         d = s["dir"]
         print(f"\n== {s['name']} {s['tag']['version']}")
+        e = reuse(s, keys[s["unit"]], store, root, a.trial)
+        if e:
+            entries.append(e)
+            continue
         with tempfile.TemporaryDirectory(prefix="fgb-release-") as tmp:
             built, res = run_gates(s, Path(tmp), trial=a.trial)
             show_gates(res)
@@ -1516,9 +1625,15 @@ def cmd_make(a):
                 shutil.copy2(f, dest)
                 files.append({"name": dest.name, "bytes": dest.stat().st_size,
                               "sha256": sha256(dest)})
-        entries.append(entry(s, fgb.Book(d), files))
+        e = entry(s, fgb.Book(d), files)
+        store.keep(s, keys[s["unit"]], root, files, e)
+        entries.append(e)
     for s in carried:
         print(f"\n== {s['name']} {s['tag']['version']} (carried, from its tag)")
+        e = reuse(s, keys[s["unit"]], store, root, a.trial, carried=True)
+        if e:
+            entries.append(e)
+            continue
         version = printed = s["tag"]["version"]
         if is_point(version):
             printed = print_version(version)
@@ -1545,6 +1660,7 @@ def cmd_make(a):
                 print(f"  failed to build from its tag: {err}")
                 failed.append(s["name"])
                 continue
+        store.keep(s, keys[s["unit"]], root, e["files"], e)
         entries.append(e)
     if failed:
         sys.exit(f"\nno release: {', '.join(failed)} failed a gate (above). A signed-off "
