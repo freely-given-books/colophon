@@ -235,12 +235,17 @@ and an unchanged book keeps its bytes from release to release. A changed book, o
 whose stored files are missing or damaged, a colophon that is not at a release tag,
 or `--rebuild` builds as before. Deleting `.built/` is safe: the next make builds all.
 
+A point version's release (0.65.1) keeps the front covers (`-front.png`) the EPUB build renders
+from the covers' Typst, with its EPUBs; 2026.11.24.2 lacked them (the Institutes' covers are
+their own design, so no print build makes the PNGs) and the site showed no covers.
+
 `make` also records each print book's facts in `catalog.json` (`printfacts.py`, 0.63.0), so a
 site never opens the PDFs: an interior PDF's file record gets `print` (`pages`, `width`,
 `height` in inches), a cover PDF's gets `wrap` (`spine` in inches, the spine's average
 `color`, and `back`/`spine_image`/`front`, the cover cut at the trim and spine lines into
 `<cover>-back.webp` etc., 900px wide, files of the release like any other). A cover pairs with
-the interior of its name without `-cover`. The first step of the plan for site builds that do
+the interior of its name without `-cover`, or, for a volume, the one whose name ends the
+same (`-cover-vol-1.pdf` and `-institutes-vol-1.pdf`, 0.65.1). The first step of the plan for site builds that do
 not grow with the library (the editor, 2026-11-23: book files to Cloudflare R2, the site's
 `/files/` redirected there by httpd).
 

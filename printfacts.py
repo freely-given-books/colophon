@@ -91,7 +91,13 @@ def add(root, entries, sha256):
                 continue
             interior = f"{m.group(1)}{m.group(2)}.pdf"
             if interior not in recs:
-                continue
+                # a volume's interior is named for its book file (-institutes-vol-1.pdf),
+                # its cover for the volume (-cover-vol-1.pdf): the one that ends so
+                likes = [n for n in recs if n.startswith(m.group(1) + "-") and not COVER.match(n)
+                         and n.endswith(f"{m.group(2)}.pdf")] if m.group(2) else []
+                if len(likes) != 1:
+                    continue
+                interior = likes[0]
             _, W, H = pdf_info(root / name)
             _, tw, th = pdf_info(root / interior)
             spine = W - 2 * tw - 2 * BLEED

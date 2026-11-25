@@ -1126,6 +1126,14 @@ def build_at(tag, outdir, epub=False, then=None, edition=None):
             git("worktree", "remove", "--force", str(wt), check=False)
 
 
+def keeps_epub_build(f):
+    """What a point version takes from the build of its EPUBs: the EPUBs, and
+    the front covers the build renders from the covers' Typst (-front.png;
+    no print build makes them for a cover of its own design). Its print
+    PDFs come from the revision's tag."""
+    return f.suffix == ".epub" or f.name.endswith("-front.png")
+
+
 def print_at(tag, outdir, edition=None):
     """The book's print PDFs and covers as they were at a sign-off (of one
     edition, or None: all)."""
@@ -1613,7 +1621,7 @@ def cmd_make(a):
                 print(f"  the print at {printed} ...")
                 print_files = print_at(f"{s['unit']}/{printed}", Path(tmp) / "print",
                                        s["build"])
-                built = [f for f in built if f.suffix == ".epub"] + print_files
+                built = [f for f in built if keeps_epub_build(f)] + print_files
             name = lambda f: asset_name(d, version if Path(f).suffix in (".epub", ".html")
                                         else printed, Path(f))
             # the reader and the comparison page, linking to the downloads by
@@ -1643,7 +1651,7 @@ def cmd_make(a):
             def finish(bk, built, s=s, tmp=tmp, name=name, version=version,
                        printed=printed):
                 if is_point(version):
-                    built = [f for f in built if f.suffix == ".epub"] + \
+                    built = [f for f in built if keeps_epub_build(f)] + \
                         print_at(f"{s['unit']}/{printed}", Path(tmp) / "print", s["build"])
                 built += fgb.build_web(bk, Path(tmp), built, link=name)
                 files = []

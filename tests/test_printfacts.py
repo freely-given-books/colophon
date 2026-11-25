@@ -56,3 +56,18 @@ def test_cover_that_does_not_fit_is_skipped(tmp_path):
     entries = [{"files": [{"name": "x-v1.pdf"}, {"name": "x-v1-cover.pdf"}]}]
     assert printfacts.add(tmp_path, entries, lambda p: "") == ["x-v1-cover.pdf"]
     assert "wrap" not in entries[0]["files"][1]
+
+
+def test_volume_cover_pairs_with_its_book_file_interior(tmp_path):
+    """A volume's interior is named for its book file (-institutes-vol-1.pdf), its
+    cover for the volume (-cover-vol-1.pdf): they still pair, and the Modern's too."""
+    b = printfacts.BLEED
+    entries = [{"files": []}]
+    for tail in ("vol-1", "vol-1-modern"):
+        pdf(tmp_path / f"x-v1-institutes-{tail}.pdf", 5.5, 8.5, pages=2)
+        pdf(tmp_path / f"x-v1-cover-{tail}.pdf", 2 * 5.5 + 2 * b + SPINE, 8.5 + 2 * b, spine_at=b + 5.5)
+        entries[0]["files"] += [{"name": f"x-v1-institutes-{tail}.pdf"}, {"name": f"x-v1-cover-{tail}.pdf"}]
+    assert printfacts.add(tmp_path, entries, lambda p: "") == []
+    files = {f["name"]: f for f in entries[0]["files"]}
+    for tail in ("vol-1", "vol-1-modern"):
+        assert files[f"x-v1-cover-{tail}.pdf"]["wrap"]["front"] == f"x-v1-cover-{tail}-front.webp"
