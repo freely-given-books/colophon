@@ -196,6 +196,13 @@ volume), the reader page and the public comparison page (`fgb.build_web`):
 `<book>-vN-reader.html` and `<book>-vN-compare.html` in a release, linked to
 each other and to the EPUB and PDF by their release names.
 
+A book in volumes with a `parallel/` folder (0.65.0; Calvin's Institutes, the editor 2026-11-24) also gets
+`<book>-vN-parallel.html` per volume (`parallel.py`): the author's own Latin and French beside the English,
+one row per section (a Markdown paragraph opening "12.", a Typst one "12\\."), any column on or off (Latin +
+English at first, kept in the browser), stacked on phones, the Latin editors' Apparatus folded under each
+chapter. Texts in `parallel/<lang>/vol-N/<chapter>.md`; column labels and French section maps in
+`parallel/sources.json`. The files are shared for sign-off (a change holds back both editions).
+
 `./fgb golden save DIR` (`golden.py`) builds every TEI book and keeps its
 outputs as text in DIR: the rebuilt TEI, both layers, each EPUB unpacked,
 the reader and comparison pages, each PDF as `pdftotext -layout` with its page
