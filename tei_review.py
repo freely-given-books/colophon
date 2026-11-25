@@ -228,11 +228,11 @@ def counts(*els):
 
 
 def division_units(root, cfg):
-    """(ident, title or None, [part elements], whole division?) per file."""
+    """(ident, file, title or None, [part elements] or the division, subtitle heads) per file."""
     files = layout.book_layout(root, cfg)
     if files is not None:
         for f in files:
-            yield file_ident(f["file"]), f["file"], f["title"], f["parts"]
+            yield file_ident(f["file"]), f["file"], f["title"], f["parts"], layout.subtitles(f)
         return
     for div in root.iter(T + "div"):
         typ = div.get("type")
@@ -242,7 +242,7 @@ def division_units(root, cfg):
             ident = f"chapter-{int(div.get('n')):02d}"
         else:
             continue
-        yield ident, f"{ident}.typ", None, div
+        yield ident, f"{ident}.typ", None, div, []
 
 
 CSS = """
@@ -647,13 +647,17 @@ def main():
 
     for f in a.before:
         modern(f, "before")
-    for ident, fname, ftitle, unit in division_units(root, cfg):
+    for ident, fname, ftitle, unit, subs in division_units(root, cfg):
         if a.only and not fname.startswith(a.only):
             continue
         if isinstance(unit, list):              # a layout file: its parts
             div = unit
             mh = [f"<h3>{html.escape(ftitle)}</h3>"] if ftitle else []
             oh = []
+            # the printed title under the number (Beveridge's Calvin: "CHAPTER 1." over its title)
+            sub = lambda side, h: f'<p class="subhead"><em>{side.text(h)}</em></p>'
+            oh += [sub(o, h) for h in subs]
+            mh += [sub(m, h) for h in subs]
             wrapper = unit
         else:
             div = unit

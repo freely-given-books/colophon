@@ -82,3 +82,20 @@ def test_sections_line_up(tmp_path):
 
 def test_typ_html_nested():
     assert parallel.typ_html(r"#emph[a #smallcaps[b] c]") == '<i>a <span class="sc">b</span> c</i>'
+
+
+def test_page_is_the_readers(tmp_path):
+    """The parallel page has the reader's bar, contents, settings and its colours."""
+    import json
+    book = tmp_path / "b"
+    (book / "chapters" / "typ" / "vol-1").mkdir(parents=True)
+    (book / "parallel" / "la" / "vol-1").mkdir(parents=True)
+    (book / "parallel" / "sources.json").write_text(json.dumps({"la": {"name": "Latin", "label": "L"}}))
+    (book / "chapters" / "typ" / "vol-1" / "a.typ").write_text("== A\n\n1\\. In English.\n")
+    (book / "parallel" / "la" / "vol-1" / "a.md").write_text("1. In Latin.\n")
+    out = tmp_path / "p.html"
+    parallel.build(book, "vol-1", out, "T", "reader.html")
+    t = out.read_text()
+    for s in ('id="bar"', 'id="toc"', 'id="settings"', 'data-theme-btn', 'data-col="la"',
+              'href="#a"', 'class="prow"', "--measure", 'href="reader.html"'):
+        assert s in t
