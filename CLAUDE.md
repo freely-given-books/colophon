@@ -249,6 +249,12 @@ same (`-cover-vol-1.pdf` and `-institutes-vol-1.pdf`, 0.65.1). The first step of
 not grow with the library (the editor, 2026-11-23: book files to Cloudflare R2, the site's
 `/files/` redirected there by httpd).
 
+The parallel page (`parallel.py`, 0.66.0) is the reader's page (`epub_reader.CSS` and `JS`: its bar,
+contents drawer, text size and theme settings, progress) with the columns' layout, and the language switches
+in the settings. The comparison page (`tei_review.py`) gives a layout file's printed title under its number
+(Calvin's chapters: "CHAPTER 1." over "THE KNOWLEDGE OF GOD ...") from the layout's `subtitle` heads; before,
+the Institutes' compare pages showed "Chapter 1" and no title.
+
 **Two editions, two releases** (the editor's decision, 2026-11-17): a book with a Modern
 English edition is two release units, each its own Lulu paperback, signed off and held back on
 its own. The Classic keeps `<author>/<book>/vN` (old tags and `books/revisions.json` keep

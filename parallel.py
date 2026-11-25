@@ -229,83 +229,105 @@ def build(book, vol, out, title=None, reader=None):
         m = re.match(r"book-(\d)-chapter-(\d+)$", typ.stem)
         if m:
             t = f"Book {'I II III IV'.split()[int(m.group(1)) - 1]}, Chapter {int(m.group(2))}"
-        nav.append(f'<option value="#{anchor}">{t}</option>')
+        nav.append(f'<li><a href="#{anchor}">{t}</a></li>')
         body = []
         for n, l, f, e in rows:
             sid = f' id="{anchor}-{n}"' if n else ""
-            body.append(f'<div class="row"{sid}>'
-                        + (f'<div class="c la" lang="la">{l}</div>' if "la" in langs else "")
-                        + (f'<div class="c fr" lang="fr">{f or "<p class=dim>—</p>"}</div>' if "fr" in langs else "")
-                        + f'<div class="c en" lang="en">{e}</div></div>')
+            body.append(f'<div class="prow"{sid}>'
+                        + (f'<div class="pc la" lang="la">{l}</div>' if "la" in langs else "")
+                        + (f'<div class="pc fr" lang="fr">{f or "<p class=dim>—</p>"}</div>' if "fr" in langs else "")
+                        + f'<div class="pc en" lang="en">{e}</div></div>')
         appx = ("<details class=\"appx\"><summary>Notes of the 1869 editors</summary><ol>"
                 + "".join(f"<li>{inline_md(re.sub(r'^\[\d+-(\d+)\]\s*', '', a))}</li>" for a in app)
                 + "</ol></details>") if app else ""
         chapters.append(f'<section class="ch" id="{anchor}"><h2>{t}</h2>{"".join(body)}{appx}</section>')
     title = title or book.name
-    heads = "".join(f'<div class="c {l}"><b>{ESC(lname[l])}</b> <span>{ESC(label[l])}</span></div>'
+    heads = "".join(f'<div class="pc {l}"><b>{ESC(lname[l])}</b> <span>{ESC(label[l])}</span></div>'
                     for l in langs + ["en"])
-    toggles = "".join(f'<label><input type="checkbox" data-col="{l}"> {ESC(lname[l])}</label>'
+    toggles = "".join(f'<button data-col="{l}" aria-pressed="false">{ESC(lname[l])}</button>'
                       for l in langs + ["en"])
-    page = (TEMPLATE.replace("%TITLE%", ESC(title))
-            .replace("%READER%", f'<a href="{ESC(reader)}">Read the English</a>' if reader else "")
-            .replace("%TOGGLES%", toggles).replace("%NAV%", "".join(nav))
-            .replace("%HEADS%", heads).replace("%BODY%", "\n".join(chapters)))
+    # the reader's page (epub_reader.py): its type, colours, bar, contents and settings,
+    # with the columns' own layout and a switch for each language in the settings
+    import epub_reader as er
+    link = (f'<a class="btn" href="{ESC(reader)}" title="The English alone">English</a>'
+            if reader else "")
+    page = (TEMPLATE.replace("%TITLE%", ESC(title)).replace("%LINK%", link)
+            .replace("%READER_CSS%", er.CSS).replace("%READER_JS%", er.JS)
+            .replace("%TOGGLES%", toggles).replace("%NAV%", f"<ol>{''.join(nav)}</ol>")
+            .replace("%HEADS%", heads).replace("%BODY%", "\n".join(chapters))
+            .replace("%BOOK%", json.dumps(title + " parallel")))
     Path(out).write_text(page, encoding="utf-8")
     return out
 
 
 TEMPLATE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>%TITLE% · Latin, French, English</title>
+<meta name="generator" content="colophon parallel.py">
+<style>%READER_CSS%</style>
 <style>
-:root{--bg:#fbf8f1;--fg:#262320;--dim:#7a7268;--line:#e2dccf;--acc:#7b3f16}
-@media (prefers-color-scheme:dark){:root{--bg:#1c1a17;--fg:#e9e4da;--dim:#9b9387;--line:#38332c;--acc:#e0a271}}
-*{box-sizing:border-box}html{scroll-padding-top:7.5rem}
-body{background:var(--bg);color:var(--fg);font:17px/1.55 Georgia,"Iowan Old Style",serif;margin:0}
-header{position:sticky;top:0;z-index:2;background:var(--bg);border-bottom:1px solid var(--line);padding:.6rem 16px}
-.bar{display:flex;flex-wrap:wrap;gap:.6rem 1.2rem;align-items:center;font:14px system-ui,sans-serif;max-width:1500px;margin:0 auto}
-.bar h1{font:600 15px system-ui,sans-serif;margin:0;flex:1 1 100%}
-.bar label{white-space:nowrap;cursor:pointer}.bar select{max-width:100%;font:inherit}
-.bar a{color:var(--acc)}
-main{max-width:1500px;margin:0 auto;padding:0 16px 4rem}
-.heads,.row{display:grid;grid-template-columns:repeat(var(--cols,2),minmax(0,1fr));gap:1.4rem}
-.heads{font:13px/1.35 system-ui,sans-serif;color:var(--dim);padding:.8rem 0;border-bottom:1px solid var(--line)}
-.heads b{color:var(--fg);display:block}
-.row{padding:.5rem 0;border-bottom:1px solid var(--line)}
-.c p{margin:0 0 .6em}.fr{font-size:.95em}.la{font-size:.97em}
-h2{font:600 1.15rem/1.3 Georgia,serif;margin:2.2rem 0 .4rem;color:var(--acc)}
-.n{font:600 .8em system-ui,sans-serif;color:var(--dim)}
-.sc{font-variant:small-caps}.fn{display:block;font-size:.85em;color:var(--dim);margin:.3em 0 .3em 1em}
+/* the columns, in the reader's page */
+main{max-width:min(96vw,92rem);padding-top:4.2rem}
+html{scroll-padding-top:7rem}
+.pheads,.prow{display:grid;grid-template-columns:repeat(var(--cols,2),minmax(0,1fr));gap:2.2rem}
+.pheads{position:sticky;top:2.55rem;z-index:5;background:var(--bg);font:13px/1.35 system-ui,sans-serif;
+ color:var(--muted);padding:.7rem 0;border-bottom:1px solid var(--rule)}
+.pheads b{color:var(--fg);display:block}
+.prow{padding:.7rem 0;border-bottom:1px solid color-mix(in srgb,var(--rule) 45%,transparent)}
+.pc{font-size:.92rem;line-height:1.6}.pc p{margin:0 0 .7em;hyphens:auto;text-indent:0}
+.pc.fr{font-size:.9rem}
+main h2{margin:3rem 0 1rem;font-size:1.3rem;text-align:center}
+.n{font:600 .8em system-ui,sans-serif;color:var(--muted)}
+.sc{font-variant:small-caps}.fn{display:block;font-size:.85em;color:var(--muted);margin:.3em 0 .3em 1em}
 .fn::before{content:"Note: ";font-style:italic}
 blockquote{margin:.4em 0 .6em 1em}.sub{font-style:italic}
-sup.app{font:600 .65em system-ui,sans-serif;color:var(--acc)}
-details.appx{font-size:.88em;color:var(--dim);margin:.8rem 0}details.appx summary{cursor:pointer;font:13px system-ui,sans-serif}
-.dim{color:var(--dim)}
+sup.app{font:600 .65em system-ui,sans-serif;color:var(--accent)}
+details.appx{font-size:.88em;color:var(--muted);margin:.8rem 0}details.appx summary{cursor:pointer;font:13px system-ui,sans-serif}
+.dim{color:var(--muted)}
 body.no-la .la,body.no-fr .fr,body.no-en .en{display:none}
-@media (max-width:760px){.heads,.row{grid-template-columns:1fr}.heads{display:none}
- .c.la::before,.c.fr::before,.c.en::before{display:block;font:600 11px system-ui,sans-serif;text-transform:uppercase;color:var(--dim)}
- .c.la::before{content:"Latin"}.c.fr::before{content:"French"}.c.en::before{content:"English"}}
+@media (max-width:760px){.pheads,.prow{grid-template-columns:1fr}.pheads{display:none}
+ .pc.la::before,.pc.fr::before,.pc.en::before{display:block;font:600 11px system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+ .pc.la::before{content:"Latin"}.pc.fr::before{content:"French"}.pc.en::before{content:"English"}}
+@media print{.pheads{position:static}}
 </style></head><body class="no-fr">
-<header><div class="bar"><h1>%TITLE% · Calvin's Latin and French beside the English</h1>
-%TOGGLES% <select id="go"><option value="">Go to…</option>%NAV%</select> %READER%</div></header>
-<main><div class="heads">%HEADS%</div>
+<div id="progress"></div>
+<header id="bar">
+<button id="open-toc" aria-label="Contents">&#9776; Contents</button>
+<div class="t"><b>%TITLE%</b> &middot; Latin, French and English</div>
+<span class="links">%LINK%</span>
+<button id="open-settings" aria-label="Reading settings">Aa</button>
+</header>
+<nav id="toc" aria-label="Contents"><h2>Contents <button id="close-toc" aria-label="Close">&times;</button></h2>%NAV%</nav>
+<div id="settings" role="dialog" aria-label="Reading settings">
+<div class="lab">Text size</div>
+<div class="row"><div class="seg" style="flex:1"><button id="smaller" aria-label="Smaller">A&minus;</button><button id="bigger" aria-label="Larger">A+</button></div></div>
+<div class="lab">Page</div>
+<div class="row"><div class="seg" style="flex:1"><button data-theme-btn="auto">Auto</button><button data-theme-btn="light">Light</button><button data-theme-btn="dark">Dark</button></div></div>
+<div class="lab">Columns</div>
+<div class="row"><div class="seg" style="flex:1">%TOGGLES%</div></div>
+</div>
+<div id="veil"></div>
+<main><div class="pheads">%HEADS%</div>
 %BODY%
 </main>
+<div id="card" role="dialog" aria-label="Note"></div>
+<button id="top">&uarr; Top</button>
+<script>const BOOK = %BOOK%;%READER_JS%</script>
 <script>
 (function(){
   var KEY="parallel-cols", on={la:true,fr:false,en:true};
   try{var s=JSON.parse(localStorage.getItem(KEY)||"null");if(s)on=s;}catch(e){}
-  var boxes=document.querySelectorAll("input[data-col]");
+  var boxes=document.querySelectorAll("button[data-col]");
   function apply(){
-    var n=0;["la","fr","en"].forEach(function(l){document.body.classList.toggle("no-"+l,!on[l]);if(on[l]&&document.querySelector(".c."+l))n++;});
+    var n=0;["la","fr","en"].forEach(function(l){document.body.classList.toggle("no-"+l,!on[l]);if(on[l]&&document.querySelector(".pc."+l))n++;});
     document.documentElement.style.setProperty("--cols",Math.max(n,1));
-    boxes.forEach(function(b){b.checked=!!on[b.dataset.col];});
+    boxes.forEach(function(b){b.setAttribute("aria-pressed",String(!!on[b.dataset.col]));});
   }
-  boxes.forEach(function(b){b.addEventListener("change",function(){
-    on[b.dataset.col]=b.checked;
-    if(!on.la&&!on.fr&&!on.en){on[b.dataset.col]=true;}
+  boxes.forEach(function(b){b.addEventListener("click",function(){
+    var l=b.dataset.col, was=on[l];
+    on[l]=!was;
+    if(!on.la&&!on.fr&&!on.en){on[l]=true;}
     try{localStorage.setItem(KEY,JSON.stringify(on));}catch(e){}
     apply();});});
-  document.getElementById("go").addEventListener("change",function(){if(this.value)location.hash=this.value;});
   apply();
 })();
 </script>
