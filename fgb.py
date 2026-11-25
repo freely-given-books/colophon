@@ -520,7 +520,9 @@ def build_web(bk, outdir, built, link=lambda name: name):
     the edition (tei_review.py --public); one of each per volume. Written as
     <epub stem>-reader.html and -compare.html; `link` gives the name a file
     will have where the pages are read (a release renames its downloads), so
-    the pages' links between themselves and to the EPUB and PDF hold there."""
+    the pages' links between themselves and to the EPUB and PDF hold there.
+    A book in volumes with a parallel/ folder also gets <stem>-parallel.html
+    per volume (parallel.py: its Latin and French beside the English)."""
     e = bk.cfg.get("EPUB", {})
     side = bk.cfg.get("SIDE_BY_SIDE", {})
     vols = e.get("volumes") or [None]
@@ -557,6 +559,12 @@ def build_web(bk, outdir, built, link=lambda name: name):
         run(PY, HERE / "tei_review.py", bk.tei, compare, "--public", "--title", title,
             "--reader", link(reader.name), *extra, cwd=bk.dir, quiet=True)
         outs += [reader, compare]
+        if v and (bk.dir / "parallel" / "sources.json").exists():
+            # the author's own Latin and French beside the English (parallel.py)
+            par = outdir / f"{stem}-parallel.html"
+            run(PY, HERE / "parallel.py", bk.dir, v["files"][0].rstrip("/"), par, "--title", title,
+                "--reader", link(reader.name), quiet=True)
+            outs.append(par)
     return outs
 
 
